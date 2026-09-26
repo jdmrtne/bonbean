@@ -1,4 +1,5 @@
 import { Button } from "./Button";
+import { WifiOffIcon } from "./Icon";
 import { useOnlineStatus } from "../hooks/useOnlineStatus";
 import { useServiceWorkerUpdate } from "../hooks/useServiceWorkerUpdate";
 
@@ -15,7 +16,7 @@ export function StatusBanners() {
   if (!isOnline) {
     return (
       <div className="banner banner--offline app-status-banner" role="status">
-        <span aria-hidden="true">📶</span>
+        <WifiOffIcon size={18} />
         <div>You&apos;re offline — sales still record and save on this device.</div>
       </div>
     );
@@ -24,7 +25,7 @@ export function StatusBanners() {
   if (updateAvailable) {
     return (
       <div className="banner banner--update app-status-banner" role="status">
-        <div>A new version of Coffee Cart POS is ready.</div>
+        <div>A new version of Bon &amp; Bean is ready.</div>
         <Button variant="ghost" size="md" onClick={applyUpdate}>
           Reload to update
         </Button>

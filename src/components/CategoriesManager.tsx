@@ -4,6 +4,7 @@ import { Card } from "./Card";
 import { EmptyState } from "./EmptyState";
 import { LoadingState } from "./LoadingState";
 import { Modal } from "./Modal";
+import { ArrowDownIcon, ArrowUpIcon, FolderIcon, PencilIcon } from "./Icon";
 import {
   addCategory,
   listCategories,
@@ -47,7 +48,7 @@ export function CategoriesManager() {
 
       {categories.length === 0 ? (
         <EmptyState
-          icon="🗂️"
+          icon={<FolderIcon size={28} />}
           title="No categories yet"
           description="Add a category (like Coffee, Snacks, or Cold Drinks) to start grouping products."
         />
@@ -68,7 +69,7 @@ export function CategoriesManager() {
                   disabled={index === 0}
                   onClick={() => moveCategory(category.id, "up").then(refresh)}
                 >
-                  ↑
+                  <ArrowUpIcon size={15} />
                 </button>
                 <button
                   className="icon-btn"
@@ -76,14 +77,14 @@ export function CategoriesManager() {
                   disabled={index === categories.length - 1}
                   onClick={() => moveCategory(category.id, "down").then(refresh)}
                 >
-                  ↓
+                  <ArrowDownIcon size={15} />
                 </button>
                 <button
                   className="icon-btn"
                   aria-label="Edit category"
                   onClick={() => setEditing(category)}
                 >
-                  ✎
+                  <PencilIcon size={15} />
                 </button>
               </div>
             </div>

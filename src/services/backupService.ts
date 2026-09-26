@@ -11,7 +11,7 @@ import { getDB, SETTINGS_KEY } from "../database/db";
 import type { Settings } from "../types";
 import { BACKUP_FORMAT_VERSION, type BackupFile } from "../utils/backup";
 
-const FALLBACK_SETTINGS: Settings = { businessName: "My Coffee Cart", currency: "₱" };
+const FALLBACK_SETTINGS: Settings = { businessName: "My bon&bean", currency: "₱" };
 
 // Reads every store as-is (no filtering of inactive products/categories/
 // payment methods — a backup is meant to be a complete, restorable copy,

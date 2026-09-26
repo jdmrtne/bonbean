@@ -4,33 +4,34 @@
 @import "@fontsource/manrope/800.css";
 
 /*
-  Coffee Cart POS — design tokens
-  Palette: "roast gold" — a warm, high-contrast working palette built for a
-  small screen in daylight, not a soft SaaS/dashboard look. Chalky neutral
-  base (not cream), espresso ink, roast-gold for primary action, deep teal
-  for confirmation, brick for destructive/warning.
+  bon&bean — design tokens
+  Palette: "sketch charcoal" — matched to the bon&bean mark: a chalky
+  warm-gray field (the logo's own background), charcoal-ink for text and
+  primary action (the logo's bold wordmark), thin warm-gray hairlines (the
+  logo's sketch linework). Deep teal for confirmation, muted brick for
+  destructive/warning.
 */
 
 :root {
   /* Color */
-  --color-bg: #f5f4f1;
-  --color-surface: #ffffff;
-  --color-surface-sunken: #ece9e2;
-  --color-ink: #23201b;
-  --color-ink-soft: #6b6459;
-  --color-ink-faint: #9a9285;
-  --color-line: #e2ded4;
-  --color-line-strong: #cfc9ba;
+  --color-bg: #e9e8e5;
+  --color-surface: #f7f6f4;
+  --color-surface-sunken: #dedcd6;
+  --color-ink: #26241f;
+  --color-ink-soft: #66625a;
+  --color-ink-faint: #97938a;
+  --color-line: #d7d4cb;
+  --color-line-strong: #c1beb2;
 
-  --color-accent: #b8791a;
-  --color-accent-strong: #96610f;
-  --color-accent-ink: #3a2508;
-  --color-accent-wash: #f2e3c9;
+  --color-accent: #2e2b26;
+  --color-accent-strong: #17150f;
+  --color-accent-ink: #26241f;
+  --color-accent-wash: #e2e0d9;
 
-  --color-success: #1c6e5e;
-  --color-success-wash: #dcece7;
-  --color-danger: #a83232;
-  --color-danger-wash: #f3dfdd;
+  --color-success: #29695a;
+  --color-success-wash: #dceae5;
+  --color-danger: #8a3b30;
+  --color-danger-wash: #f2ddd8;
 
   /* Type */
   --font-body: "Manrope", system-ui, -apple-system, "Segoe UI", sans-serif;

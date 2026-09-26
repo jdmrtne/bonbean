@@ -2,7 +2,7 @@ import { getDB, SETTINGS_KEY } from "../database/db";
 import type { Settings } from "../types";
 
 const FALLBACK_SETTINGS: Settings = {
-  businessName: "My Coffee Cart",
+  businessName: "My bon&bean",
   currency: "₱",
 };
 

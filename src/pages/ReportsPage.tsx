@@ -10,6 +10,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Button } from "../components/Button";
 import { Card } from "../components/Card";
 import { EmptyState } from "../components/EmptyState";
+import { BarChartIcon } from "../components/Icon";
 import { LoadingState } from "../components/LoadingState";
 import { listSales } from "../services/salesService";
 import { getSettings } from "../services/settingsService";
@@ -158,7 +159,7 @@ export function ReportsPage() {
           this instead, so a printed/"Saved as PDF" report reads as a
           standalone document rather than a screenshot of the app UI. */}
       <div className="print-only print-report-header">
-        <div className="print-report-header__business">{businessName || "Coffee Cart"}</div>
+        <div className="print-report-header__business">{businessName || "bon&bean"}</div>
         <div className="print-report-header__title">Sales report — {rangeLabel}</div>
         <div className="print-report-header__meta">Generated {new Date().toLocaleString()}</div>
       </div>
@@ -214,7 +215,7 @@ export function ReportsPage() {
 
       {rangeSales.length === 0 ? (
         <EmptyState
-          icon="📊"
+          icon={<BarChartIcon size={28} />}
           title="No sales in this range"
           description="Try a different preset, or widen the custom range."
         />

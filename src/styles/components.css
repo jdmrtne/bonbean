@@ -78,7 +78,10 @@
 }
 
 .empty-state__icon {
-  font-size: 2rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-ink-faint);
 }
 
 .empty-state__title {
@@ -364,6 +367,9 @@
   cursor: pointer;
   color: var(--color-ink-soft);
   font-size: 1.05rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .icon-btn:hover {
@@ -833,7 +839,10 @@ button.list-row:hover {
 }
 
 .checkout-confirm__icon {
-  font-size: 2.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-success);
 }
 
 .checkout-confirm__total {

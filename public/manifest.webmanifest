@@ -1,13 +1,13 @@
 {
-  "name": "Coffee Cart POS",
-  "short_name": "Coffee Cart",
-  "description": "A simple, fast, offline-capable sales recording app for a coffee cart.",
+  "name": "bon&bean",
+  "short_name": "bon&bean",
+  "description": "bon&bean — stovetop espresso, sold simply. A fast, offline-capable sales recording app.",
   "start_url": "/#/",
   "scope": "/",
   "display": "standalone",
   "orientation": "any",
-  "background_color": "#f5f4f1",
-  "theme_color": "#23201b",
+  "background_color": "#e9e8e5",
+  "theme_color": "#26241f",
   "icons": [
     {
       "src": "/icons/icon-192.png",

@@ -1,4 +1,4 @@
-// Coffee Cart POS — service worker
+// bon&bean — service worker
 //
 // Hand-written (no vite-plugin-pwa / Workbox) so this project stays free
 // of build-time PWA tooling that can't be verified without npm registry
@@ -21,8 +21,8 @@
 // file, so `activate` evicts the old cache. This is a manual step —
 // there is no automatic content-hash-based cache busting without adding
 // a build plugin. See HANDOFF.md for this trade-off.
-const CACHE_VERSION = "v2";
-const CACHE_NAME = `coffee-cart-pos-shell-${CACHE_VERSION}`;
+const CACHE_VERSION = "v3";
+const CACHE_NAME = `bon-and-bean-shell-${CACHE_VERSION}`;
 
 // URLs known at author time (unhashed, stable paths), precached on
 // install so the very first offline load has an app shell to fall back
@@ -43,7 +43,7 @@ self.addEventListener("install", (event) => {
       .then((cache) => cache.addAll(PRECACHE_URLS))
       // One failed precache URL (e.g. a 404 in an unusual deploy layout)
       // shouldn't block installation of the rest of the shell.
-      .catch((err) => console.warn("Coffee Cart POS SW: precache partial failure", err)),
+      .catch((err) => console.warn("bon&bean SW: precache partial failure", err)),
   );
   // Deliberately NOT self.skipWaiting() here. A new service worker only
   // takes over once the person explicitly taps "Reload to update" in the

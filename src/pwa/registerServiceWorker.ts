@@ -44,7 +44,7 @@ export function registerServiceWorker(): void {
         });
       })
       .catch((err) => {
-        console.warn("Coffee Cart POS: service worker registration failed", err);
+        console.warn("bon&bean: service worker registration failed", err);
       });
 
     // Reload once the new worker actually takes control, so

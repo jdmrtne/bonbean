@@ -3,6 +3,7 @@ import { Card } from "../components/Card";
 import { EmptyState } from "../components/EmptyState";
 import { LoadingState } from "../components/LoadingState";
 import { SaleDetailModal } from "../components/SaleDetailModal";
+import { ReceiptIcon } from "../components/Icon";
 import { formatDateKey, listSales } from "../services/salesService";
 import { getSettings } from "../services/settingsService";
 import type { Sale } from "../types";
@@ -160,7 +161,7 @@ export function HistoryPage() {
 
       {filteredSales.length === 0 ? (
         <EmptyState
-          icon="🧾"
+          icon={<ReceiptIcon size={28} />}
           title={sales.length === 0 ? "No sales recorded yet" : "No sales match your search"}
           description={
             sales.length === 0

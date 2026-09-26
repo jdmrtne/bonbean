@@ -1,5 +1,6 @@
 import { Button } from "./Button";
 import { EmptyState } from "./EmptyState";
+import { CartIcon, TrashIcon } from "./Icon";
 import type { UseCartResult } from "../hooks/useCart";
 import { formatMoney } from "../utils/money";
 
@@ -19,7 +20,7 @@ export function CartPanel({ cart, currency, onCheckout }: CartPanelProps) {
   if (lines.length === 0) {
     return (
       <EmptyState
-        icon="🛒"
+        icon={<CartIcon size={28} />}
         title="Cart is empty"
         description="Tap a product to add it to the order."
       />
@@ -72,7 +73,7 @@ export function CartPanel({ cart, currency, onCheckout }: CartPanelProps) {
               aria-label={`Remove ${line.name} from cart`}
               onClick={() => removeLine(line.productId)}
             >
-              🗑
+              <TrashIcon size={17} />
             </button>
           </div>
         ))}

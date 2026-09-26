@@ -1,4 +1,4 @@
-// IndexedDB initialization for Coffee Cart POS.
+// IndexedDB initialization for bon&bean.
 //
 // PHASE 1: real schema. All 6 stores from the master spec now exist:
 // products, categories, paymentMethods, sales, saleItems, settings.
@@ -65,7 +65,7 @@ const DEFAULT_PAYMENT_METHODS: Omit<PaymentMethod, "id">[] = [
 ];
 
 const DEFAULT_SETTINGS: Settings = {
-  businessName: "My Coffee Cart",
+  businessName: "My bon&bean",
   currency: "₱",
 };
 

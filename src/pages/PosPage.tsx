@@ -4,6 +4,7 @@ import { CheckoutModal } from "../components/CheckoutModal";
 import { EmptyState } from "../components/EmptyState";
 import { LoadingState } from "../components/LoadingState";
 import { Modal } from "../components/Modal";
+import { CoffeeIcon } from "../components/Icon";
 import { listCategories } from "../services/categoriesService";
 import { listPaymentMethods } from "../services/paymentMethodsService";
 import { listProducts } from "../services/productsService";
@@ -132,7 +133,7 @@ export function PosPage() {
 
           {gridProducts.length === 0 ? (
             <EmptyState
-              icon="☕"
+              icon={<CoffeeIcon size={28} />}
               title="No products available"
               description={
                 products.length === 0
@@ -150,7 +151,7 @@ export function PosPage() {
                   onClick={() => cart.addProduct(product)}
                 >
                   <div className="product-tile__thumb" aria-hidden="true">
-                    {product.image ? <img src={product.image} alt="" /> : "☕"}
+                    {product.image ? <img src={product.image} alt="" /> : <CoffeeIcon size={20} />}
                   </div>
                   <div className="product-tile__name">{product.name}</div>
                   <div className="product-tile__price">

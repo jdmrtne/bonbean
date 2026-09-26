@@ -4,6 +4,7 @@ import { Card } from "./Card";
 import { EmptyState } from "./EmptyState";
 import { LoadingState } from "./LoadingState";
 import { Modal } from "./Modal";
+import { ArrowDownIcon, ArrowUpIcon, CardIcon, PencilIcon } from "./Icon";
 import {
   addPaymentMethod,
   listPaymentMethods,
@@ -47,7 +48,7 @@ export function PaymentMethodsManager() {
 
       {methods.length === 0 ? (
         <EmptyState
-          icon="💳"
+          icon={<CardIcon size={28} />}
           title="No payment methods yet"
           description="Add at least one payment method so sales can be recorded."
         />
@@ -68,7 +69,7 @@ export function PaymentMethodsManager() {
                   disabled={index === 0}
                   onClick={() => movePaymentMethod(method.id, "up").then(refresh)}
                 >
-                  ↑
+                  <ArrowUpIcon size={15} />
                 </button>
                 <button
                   className="icon-btn"
@@ -76,14 +77,14 @@ export function PaymentMethodsManager() {
                   disabled={index === methods.length - 1}
                   onClick={() => movePaymentMethod(method.id, "down").then(refresh)}
                 >
-                  ↓
+                  <ArrowDownIcon size={15} />
                 </button>
                 <button
                   className="icon-btn"
                   aria-label="Edit payment method"
                   onClick={() => setEditing(method)}
                 >
-                  ✎
+                  <PencilIcon size={15} />
                 </button>
               </div>
             </div>

@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { useEffect } from "react";
 import { createPortal } from "react-dom";
+import { CloseIcon } from "./Icon";
 
 interface ModalProps {
   title: string;
@@ -34,7 +35,7 @@ export function Modal({ title, onClose, children }: ModalProps) {
             onClick={onClose}
             aria-label="Close"
           >
-            ✕
+            <CloseIcon size={16} />
           </button>
         </div>
         <div className="modal-sheet__body">{children}</div>

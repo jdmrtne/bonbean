@@ -1,11 +1,14 @@
 import { NavLink, Outlet } from "react-router-dom";
 import { StatusBanners } from "./StatusBanners";
+import { BarChartIcon, CoffeeIcon, FolderIcon, ReceiptIcon } from "./Icon";
+import logoFull from "../assets/logo-full.png";
+import logoMark from "../assets/logo-mark.png";
 
 const NAV_ITEMS = [
-  { to: "/", label: "POS", icon: "☕", end: true },
-  { to: "/history", label: "History", icon: "🧾" },
-  { to: "/reports", label: "Reports", icon: "📊" },
-  { to: "/products", label: "Products", icon: "🗂️" },
+  { to: "/", label: "POS", icon: CoffeeIcon, end: true },
+  { to: "/history", label: "History", icon: ReceiptIcon },
+  { to: "/reports", label: "Reports", icon: BarChartIcon },
+  { to: "/products", label: "Products", icon: FolderIcon },
 ];
 
 export function AppShell() {
@@ -13,10 +16,7 @@ export function AppShell() {
     <div className="app-shell">
       <aside className="app-sidebar">
         <div className="app-sidebar__brand">
-          <div className="app-topbar__mark" aria-hidden="true">
-            ☕
-          </div>
-          <span className="app-topbar__title">Coffee Cart</span>
+          <img className="app-sidebar__logo" src={logoFull} alt="bon&bean — stovetop espresso" />
         </div>
         {NAV_ITEMS.map((item) => (
           <NavLink
@@ -27,7 +27,7 @@ export function AppShell() {
               ["app-sidebar__link", isActive ? "is-active" : ""].filter(Boolean).join(" ")
             }
           >
-            <span aria-hidden="true">{item.icon}</span>
+            <item.icon size={19} aria-hidden="true" />
             {item.label}
           </NavLink>
         ))}
@@ -42,12 +42,10 @@ export function AppShell() {
               phone screen. Reuses the same mark/title classes as the
               sidebar brand rather than inventing new ones. */}
           <div className="app-topbar__brand-mobile">
-            <div className="app-topbar__mark" aria-hidden="true">
-              ☕
-            </div>
-            <span className="app-topbar__title">Coffee Cart</span>
+            <img className="app-topbar__mark" src={logoMark} alt="bon&bean" />
+            <span className="app-topbar__title">bon&amp;bean</span>
           </div>
-          <span className="app-topbar__page">Sales recording, made simple</span>
+          <span className="app-topbar__page">Stovetop espresso, sold simply</span>
         </div>
       </header>
 
@@ -69,7 +67,7 @@ export function AppShell() {
             }
           >
             <span className="app-tabbar__icon" aria-hidden="true">
-              {item.icon}
+              <item.icon size={20} />
             </span>
             {item.label}
           </NavLink>

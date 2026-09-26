@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Button } from "./Button";
 import { Modal } from "./Modal";
+import { CheckCircleIcon } from "./Icon";
 import { recordSale } from "../services/salesService";
 import type { UseCartResult } from "../hooks/useCart";
 import type { PaymentMethod } from "../types";
@@ -95,7 +96,7 @@ export function CheckoutModal({
       <Modal title="Sale saved" onClose={finish}>
         <div className="checkout-confirm">
           <div className="checkout-confirm__icon" aria-hidden="true">
-            ✅
+            <CheckCircleIcon size={30} />
           </div>
           <div className="checkout-confirm__total">
             {formatMoney(savedSale.total, currency)}

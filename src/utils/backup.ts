@@ -121,5 +121,5 @@ export function serializeBackup(payload: BackupFile): string {
 // right now, matching salesExport.ts's buildExportFilename convention of
 // a plain, sortable date-stamped name.
 export function buildBackupFilename(now: Date = new Date()): string {
-  return `coffee-cart-backup_${formatDateKey(now)}.json`;
+  return `bon-and-bean-backup_${formatDateKey(now)}.json`;
 }

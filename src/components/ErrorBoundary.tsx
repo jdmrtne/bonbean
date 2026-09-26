@@ -18,7 +18,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
 
   componentDidCatch(error: Error, info: ErrorInfo) {
     // Logged for now; PHASE 4+ can persist crash logs if needed.
-    console.error("Coffee Cart POS crashed:", error, info.componentStack);
+    console.error("bon&bean crashed:", error, info.componentStack);
   }
 
   private handleReset = () => {

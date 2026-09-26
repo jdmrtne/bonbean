@@ -4,6 +4,7 @@ import { Card } from "./Card";
 import { EmptyState } from "./EmptyState";
 import { LoadingState } from "./LoadingState";
 import { Modal } from "./Modal";
+import { CoffeeIcon, PauseIcon, PencilIcon, PlayIcon } from "./Icon";
 import { listCategories } from "../services/categoriesService";
 import { getSettings } from "../services/settingsService";
 import {
@@ -71,7 +72,7 @@ export function ProductsManager() {
 
       {products.length === 0 ? (
         <EmptyState
-          icon="☕"
+          icon={<CoffeeIcon size={28} />}
           title="No products yet"
           description="Add your first product — a coffee, a pastry, anything you sell from the cart."
         />
@@ -87,7 +88,7 @@ export function ProductsManager() {
                     style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: "inherit" }}
                   />
                 ) : (
-                  "☕"
+                  <CoffeeIcon size={18} />
                 )}
               </div>
               <div className="list-row__main">
@@ -105,7 +106,7 @@ export function ProductsManager() {
                   aria-label="Edit product"
                   onClick={() => setEditing(product)}
                 >
-                  ✎
+                  <PencilIcon size={15} />
                 </button>
                 <button
                   className="icon-btn"
@@ -114,7 +115,7 @@ export function ProductsManager() {
                     setProductActive(product.id, !product.active).then(refresh)
                   }
                 >
-                  {product.active ? "⏸" : "▶"}
+                  {product.active ? <PauseIcon size={15} /> : <PlayIcon size={15} />}
                 </button>
               </div>
             </div>

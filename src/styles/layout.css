@@ -54,15 +54,9 @@
 }
 
 .app-topbar__mark {
-  width: 32px;
-  height: 32px;
-  border-radius: var(--radius-sm);
-  background: var(--color-ink);
-  color: var(--color-accent-wash);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font: var(--text-heading);
+  width: 34px;
+  height: 34px;
+  object-fit: contain;
   flex: 0 0 auto;
 }
 
@@ -120,15 +114,13 @@
 }
 
 .app-tabbar__icon {
-  font-size: 1.25rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   line-height: 1;
 }
 
 .app-tabbar__item.is-active {
-  color: var(--color-accent-strong);
-}
-
-.app-tabbar__item.is-active .app-tabbar__mark {
   color: var(--color-accent-strong);
 }
 
@@ -163,8 +155,14 @@
   .app-sidebar__brand {
     display: flex;
     align-items: center;
-    gap: var(--space-2);
-    padding: var(--space-2) var(--space-2) var(--space-5);
+    padding: var(--space-4) var(--space-2) var(--space-5);
+  }
+
+  .app-sidebar__logo {
+    width: 100%;
+    max-width: 158px;
+    height: auto;
+    display: block;
   }
 
   .app-topbar__brand-mobile {

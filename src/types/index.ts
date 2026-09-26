@@ -1,4 +1,4 @@
-// Domain types for Coffee Cart POS.
+// Domain types for bon&bean.
 // These mirror the IndexedDB stores that will be built in PHASE 1.
 // Defined now so components/routes built in later phases share one source of truth.
 
