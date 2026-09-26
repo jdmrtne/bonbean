@@ -22,14 +22,16 @@ const FALLBACK_SETTINGS: Settings = { businessName: "My bon&bean", currency: "�
 // they're already each SaleItem's price/name snapshot at time of sale.
 export async function buildBackupFile(): Promise<BackupFile> {
   const db = await getDB();
-  const [products, categories, paymentMethods, sales, saleItems, settings] = await Promise.all([
-    db.getAll("products"),
-    db.getAll("categories"),
-    db.getAll("paymentMethods"),
-    db.getAll("sales"),
-    db.getAll("saleItems"),
-    db.get("settings", SETTINGS_KEY),
-  ]);
+  const [products, categories, paymentMethods, sales, saleItems, settings, registerSessions] =
+    await Promise.all([
+      db.getAll("products"),
+      db.getAll("categories"),
+      db.getAll("paymentMethods"),
+      db.getAll("sales"),
+      db.getAll("saleItems"),
+      db.get("settings", SETTINGS_KEY),
+      db.getAll("registerSessions"),
+    ]);
 
   return {
     formatVersion: BACKUP_FORMAT_VERSION,
@@ -40,6 +42,7 @@ export async function buildBackupFile(): Promise<BackupFile> {
     sales,
     saleItems,
     settings: settings ?? FALLBACK_SETTINGS,
+    registerSessions,
   };
 }
 
@@ -89,6 +92,7 @@ export async function restoreBackup(payload: BackupFile): Promise<void> {
     "saleItems",
     "settings",
     "orderSequence",
+    "registerSessions",
   ] as const;
 
   const tx = db.transaction(storeNames, "readwrite");
@@ -150,6 +154,11 @@ export async function restoreBackup(payload: BackupFile): Promise<void> {
     // never collide with (or fall behind) a restored order's ID — see
     // ORDER_SEQUENCE_KEY's comment in database/db.ts.
     tx.objectStore("orderSequence").put(highestSequence, ORDER_SEQUENCE_KEY),
+    // PHASE 12: a backup taken before register sessions existed has
+    // `registerSessions` defaulted to [] by validateBackupFile, so this
+    // is a no-op clear-only for an old backup — no open session comes
+    // back, matching the "open a fresh register" first-run experience.
+    ...payload.registerSessions.map((s) => tx.objectStore("registerSessions").put(s)),
   ]);
 
   await tx.done;

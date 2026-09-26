@@ -18,6 +18,12 @@ async function main() {
     "../src/services/productsService"
   );
   const { getSettings, updateSettings } = await import("../src/services/settingsService");
+  const { openRegister, closeRegister, getOpenSession, listRegisterSessions } = await import(
+    "../src/services/registerService"
+  );
+  const { computeRegisterClosingSummary, filterSalesBySession } = await import(
+    "../src/utils/registerStats"
+  );
 
   const assert = (cond: unknown, msg: string) => {
     if (!cond) throw new Error(`FAIL: ${msg}`);
@@ -578,6 +584,53 @@ async function main() {
     "restoreBackup restores settings from the backup",
   );
 
+  // PHASE 12 — registerSessions is optional (see utils/backup.ts's
+  // comment): a malformed one is still rejected, but an old-format
+  // fixture with no registerSessions key at all (validBackupFixture
+  // above) already validated fine — confirming that path here too.
+  assert(
+    validateBackupFile({ ...validBackupFixture, registerSessions: "nope" }).valid === false,
+    "validateBackupFile rejects a non-array registerSessions field when present",
+  );
+  assert(
+    validateBackupFile({
+      ...validBackupFixture,
+      registerSessions: [{ id: "fx-r1", openingFund: 500, openedAt: "2026-03-18T09:00:00.000Z" }],
+    }).valid === true,
+    "validateBackupFile accepts a well-formed registerSessions section",
+  );
+
+  // Real round trip, same "mutate the live db AFTER taking the backup"
+  // pattern as the products/sales checks above: open a session, back it
+  // up while still open, close it, then restore and confirm the backup
+  // brings the OPEN session back exactly as it was when backed up.
+  const tempRegisterSession = await openRegister(500);
+  const backupWithSession = await buildBackupFile();
+  assert(
+    backupWithSession.registerSessions.some((s) => s.id === tempRegisterSession.id),
+    "buildBackupFile includes register sessions",
+  );
+  await closeRegister(tempRegisterSession.id, 500);
+  assert(
+    (await getOpenSession()) === null,
+    "sanity check: the session is closed before restoring the backup that captured it open",
+  );
+  await restoreBackup(backupWithSession);
+  const reopenedFromBackup = await getOpenSession();
+  assert(
+    reopenedFromBackup !== null &&
+      reopenedFromBackup.id === tempRegisterSession.id &&
+      reopenedFromBackup.closedAt === undefined,
+    "restoreBackup brings back a register session exactly as it was when backed up (still open)",
+  );
+  // Close it again so later sections (register open/close, below) start
+  // from a clean slate, same as every other store this round-trip touched.
+  await closeRegister(tempRegisterSession.id, 500);
+  assert(
+    (await getOpenSession()) === null,
+    "register session closed again after the backup round-trip check",
+  );
+
   // 11. Cash payment configuration (PHASE 10)
   // -- isCash now drives cash handling instead of matching the method's
   // name against the literal string "Cash" (see CheckoutModal.tsx and
@@ -631,9 +684,94 @@ async function main() {
   const clearedDraft = await getCartDraft();
   assert(clearedDraft.length === 0, "clearCartDraft empties the persisted draft");
 
+  // 13. Register open/close with a Cash Fund (PHASE 12)
+  assert((await getOpenSession()) === null, "no register session is open before one is created");
+
+  const registerSession = await openRegister(2000);
+  assert(registerSession.openingFund === 2000, "openRegister stores the opening cash fund");
+  assert(registerSession.closedAt === undefined, "a freshly opened session has no closedAt");
+
+  const reopened = await getOpenSession();
+  assert(
+    reopened !== null && reopened.id === registerSession.id,
+    "getOpenSession returns the session just opened",
+  );
+
+  let openTwiceFailed = false;
+  try {
+    await openRegister(500);
+  } catch {
+    openTwiceFailed = true;
+  }
+  assert(openTwiceFailed, "openRegister refuses to open a second session while one is open");
+
+  await tick();
+  const gcashForRegister = methods.find((m) => m.name === "GCash")!;
+  await recordSale({
+    lines: [{ productId: latte.id, name: "Iced Latte", unitPrice: 120, quantity: 1 }],
+    paymentMethod: "Cash",
+    amountReceived: 120,
+    change: 0,
+  });
+  await tick();
+  await recordSale({
+    lines: [{ productId: latte.id, name: "Iced Latte", unitPrice: 120, quantity: 1 }],
+    paymentMethod: gcashForRegister.name,
+  });
+
+  const allSalesForRegister = await listSales();
+  const shiftSales = filterSalesBySession(allSalesForRegister, registerSession);
+  assert(
+    shiftSales.length === 2,
+    "filterSalesBySession scopes to sales recorded during the open session",
+  );
+
+  // Physical count of 2240 = 2000 opening fund + 120 cash sale + 120
+  // over/short slack, so Cash Sales (2240 - 2000 = 240) intentionally
+  // does NOT equal the single ₱120 cash sale actually recorded above —
+  // this proves cashSales comes from the physical count, not from
+  // summing cash-tagged sales, exactly per the brief's formula.
+  const summary = computeRegisterClosingSummary(shiftSales, methods, registerSession.openingFund, 2240);
+  assert(summary.cashSales === 240, "Cash Sales = Physical Cash Counted - Opening Cash Fund");
+  assert(
+    summary.nonCashBreakdown.some(([name, total]) => name === "GCash" && total === 120),
+    "non-cash payment methods are broken out by name with their own shift total",
+  );
+  assert(
+    summary.totalSales === summary.cashSales + 120,
+    "Total Sales = Cash Sales + every non-cash payment method's total",
+  );
+  assert(
+    !summary.nonCashBreakdown.some(([name]) => name === "Cash"),
+    "the Cash payment method itself never appears in the non-cash breakdown",
+  );
+  assert(
+    summary.recordedCashSales === 120 && summary.cashVariance === 120,
+    "recordedCashSales/cashVariance compare the counted cash against the receipts, informationally only",
+  );
+
+  const closed = await closeRegister(registerSession.id, 2240);
+  assert(closed.closedAt !== undefined, "closeRegister stamps closedAt");
+  assert(closed.physicalCashCounted === 2240, "closeRegister stores the physical cash counted");
+  assert((await getOpenSession()) === null, "no session is open immediately after closing");
+
+  let closeTwiceFailed = false;
+  try {
+    await closeRegister(registerSession.id, 100);
+  } catch {
+    closeTwiceFailed = true;
+  }
+  assert(closeTwiceFailed, "closeRegister refuses to close an already-closed session");
+
+  const sessionHistory = await listRegisterSessions();
+  assert(
+    sessionHistory.length === 2 && sessionHistory[0].id === registerSession.id,
+    "listRegisterSessions returns every session, most-recent-first (the backup-roundtrip session from earlier, then this one)",
+  );
+
   console.log("\nAll smoke tests passed.");
 
-  // 13. Offline + PWA (PHASE 8) — intentionally NOT covered here.
+  // 14. Offline + PWA (PHASE 8) — intentionally NOT covered here.
   // public/sw.js, src/pwa/registerServiceWorker.ts, and
   // src/hooks/useOnlineStatus.ts/useServiceWorkerUpdate.ts are all
   // browser-API surface (ServiceWorkerContainer, CacheStorage,
@@ -673,6 +811,16 @@ async function main() {
   // confirm every existing sale gets a sensible, uniquely-numbered
   // ORD-#### after upgrading, and that a newly recorded sale continues
   // the sequence rather than restarting it.
+  //
+  // Also NOT covered here (PHASE 12): the real DB_VERSION 4 -> 5 upgrade
+  // path that creates the new `registerSessions` store (database/db.ts's
+  // upgrade(), oldVersion < 5 branch) — every DB this script opens
+  // starts fresh at version 5, so that branch's object-store-creation
+  // code runs, but there's no pre-existing data for it to migrate (it
+  // backfills nothing, by design — see that branch's comment). Left as a
+  // manual QA item, same as the migrations above: on a device with real
+  // pre-Phase-12 data, confirm the POS now asks for an Opening Cash Fund
+  // before the first sale after upgrading.
 }
 
 main().catch((err) => {

@@ -73,6 +73,23 @@ export interface Settings {
   currency: string;
 }
 
+// PHASE 12 — Open/Close Register with a cash fund. One record per shift.
+// `closedAt`/`physicalCashCounted` are only set once the shift is closed
+// (see services/registerService.ts's closeRegister) — a session with no
+// `closedAt` is the currently open one, and there is never more than one
+// of those at a time (openRegister guards against opening a second).
+// The Opening Cash Fund is change-drawer float, never a sale or an
+// expense — it is only ever used to back out the physical count into
+// Cash Sales at close time (see utils/registerStats.ts), never added to
+// or subtracted from Total Sales directly.
+export interface RegisterSession {
+  id: string;
+  openingFund: number;
+  openedAt: string; // ISO timestamp
+  closedAt?: string; // ISO timestamp; absent while the session is open
+  physicalCashCounted?: number;
+}
+
 // POS cart line (in-memory, before a sale is saved)
 export interface CartLine {
   productId: string;

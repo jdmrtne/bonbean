@@ -18,6 +18,7 @@ import type {
   Category,
   PaymentMethod,
   Product,
+  RegisterSession,
   Sale,
   SaleItem,
   Settings,
@@ -26,7 +27,7 @@ import { generateId } from "../utils/id";
 import { formatOrderNumber, parseOrderNumber } from "../utils/orderNumber";
 
 export const DB_NAME = "coffee-cart-pos";
-export const DB_VERSION = 4;
+export const DB_VERSION = 5;
 
 export const SETTINGS_KEY = "app";
 
@@ -81,6 +82,17 @@ interface CoffeeCartDBSchema extends DBSchema {
   orderSequence: {
     key: string;
     value: number;
+  };
+  // PHASE 12: Open/Close Register sessions (see types/index.ts's
+  // RegisterSession). Keyed by id (unlike cartDraft/settings/
+  // orderSequence's single fixed key) since, unlike those, this store
+  // keeps a full history of every past shift, not just the current one —
+  // services/registerService.ts finds "the open session" by scanning for
+  // the one record with no closedAt.
+  registerSessions: {
+    key: string;
+    value: RegisterSession;
+    indexes: { "by-openedAt": string };
   };
 }
 
@@ -210,6 +222,20 @@ export function getDB(): Promise<IDBPDatabase<CoffeeCartDBSchema>> {
           } else {
             await tx.objectStore("orderSequence").put(0, ORDER_SEQUENCE_KEY);
           }
+        }
+
+        if (oldVersion < 5) {
+          if (!db.objectStoreNames.contains("registerSessions")) {
+            const registerSessions = db.createObjectStore("registerSessions", {
+              keyPath: "id",
+            });
+            registerSessions.createIndex("by-openedAt", "openedAt");
+          }
+          // No backfill needed: a device with pre-existing sales but no
+          // register-session history simply has no open session yet, and
+          // PosPage.tsx requires opening one (with a fresh opening cash
+          // fund) before the next sale — exactly the same first-run
+          // experience a brand-new install gets.
         }
       },
     });

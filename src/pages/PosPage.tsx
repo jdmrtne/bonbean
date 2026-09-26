@@ -1,17 +1,21 @@
 import { useEffect, useMemo, useState } from "react";
+import { Button } from "../components/Button";
 import { CartPanel } from "../components/CartPanel";
 import { CheckoutModal } from "../components/CheckoutModal";
+import { CloseRegisterModal } from "../components/CloseRegisterModal";
 import { EmptyState } from "../components/EmptyState";
 import { LoadingState } from "../components/LoadingState";
 import { Modal } from "../components/Modal";
+import { OpenRegisterGate } from "../components/OpenRegisterGate";
 import { CoffeeIcon } from "../components/Icon";
 import { listCategories } from "../services/categoriesService";
 import { clearCartDraft, getCartDraft, saveCartDraft } from "../services/cartDraftService";
 import { listPaymentMethods } from "../services/paymentMethodsService";
 import { listProducts } from "../services/productsService";
+import { getOpenSession } from "../services/registerService";
 import { getSettings } from "../services/settingsService";
 import { useCart } from "../hooks/useCart";
-import type { Category, PaymentMethod, Product } from "../types";
+import type { Category, PaymentMethod, Product, RegisterSession } from "../types";
 import { formatMoney } from "../utils/money";
 
 const ALL_CATEGORIES = "all";
@@ -24,6 +28,14 @@ export function PosPage() {
   const [selectedCategory, setSelectedCategory] = useState<string>(ALL_CATEGORIES);
   const [cartSheetOpen, setCartSheetOpen] = useState(false);
   const [checkoutOpen, setCheckoutOpen] = useState(false);
+  // PHASE 12: undefined while the initial load below is in flight, null
+  // once loaded if no register session is currently open, otherwise the
+  // open session. Sales cannot be made (see the render branch below)
+  // until this is a RegisterSession.
+  const [registerSession, setRegisterSession] = useState<RegisterSession | null | undefined>(
+    undefined,
+  );
+  const [closeRegisterOpen, setCloseRegisterOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Guards the cart-persistence effect below so it never fires (and
   // overwrites the persisted draft with an empty cart) before the draft
@@ -36,17 +48,19 @@ export function PosPage() {
     let cancelled = false;
     async function load() {
       try {
-        const [categoryList, productList, methodList, settings] = await Promise.all([
+        const [categoryList, productList, methodList, settings, openSession] = await Promise.all([
           listCategories(false),
           listProducts(false),
           listPaymentMethods(false),
           getSettings(),
+          getOpenSession(),
         ]);
         if (cancelled) return;
         setCategories(categoryList);
         setProducts(productList);
         setPaymentMethods(methodList);
         setCurrency(settings.currency);
+        setRegisterSession(openSession);
       } catch (err) {
         if (!cancelled) {
           setError(err instanceof Error ? err.message : "Could not load the product catalog");
@@ -129,13 +143,39 @@ export function PosPage() {
     );
   }
 
-  if (categories === null || products === null) return <LoadingState label="Loading products…" />;
+  if (categories === null || products === null || registerSession === undefined) {
+    return <LoadingState label="Loading products…" />;
+  }
+
+  // PHASE 12: no sale can be made until a register session is open — the
+  // product grid and cart never render in this state, only the Opening
+  // Cash Fund prompt.
+  if (registerSession === null) {
+    return (
+      <>
+        <div className="page-header">
+          <h1 className="page-header__title">POS</h1>
+          <p className="page-header__subtitle">Open the register to start taking orders.</p>
+        </div>
+        <OpenRegisterGate currency={currency} onOpened={setRegisterSession} />
+      </>
+    );
+  }
 
   return (
     <>
       <div className="page-header">
         <h1 className="page-header__title">POS</h1>
         <p className="page-header__subtitle">Tap products to start an order.</p>
+      </div>
+
+      <div className="register-bar">
+        <span className="register-bar__status">
+          Register open · Opening fund {formatMoney(registerSession.openingFund, currency)}
+        </span>
+        <Button variant="secondary" onClick={() => setCloseRegisterOpen(true)}>
+          Close Register
+        </Button>
       </div>
 
       <div className="pos-layout">
@@ -238,6 +278,21 @@ export function PosPage() {
           paymentMethods={paymentMethods}
           onClose={() => setCheckoutOpen(false)}
           onDone={() => setCheckoutOpen(false)}
+        />
+      )}
+
+      {closeRegisterOpen && (
+        <CloseRegisterModal
+          session={registerSession}
+          currency={currency}
+          paymentMethods={paymentMethods}
+          onClose={() => setCloseRegisterOpen(false)}
+          onClosed={() => {
+            setCloseRegisterOpen(false);
+            // Back to the Open Register gate — the next sale needs a
+            // fresh Opening Cash Fund for the new shift.
+            setRegisterSession(null);
+          }}
         />
       )}
     </>

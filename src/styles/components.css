@@ -520,6 +520,73 @@ button.list-row:hover {
   gap: var(--space-3);
 }
 
+/* PHASE 12: Open/Close Register with a Cash Fund */
+.open-register-card {
+  max-width: 320px;
+  width: 100%;
+  margin-top: var(--space-3);
+}
+
+.register-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  margin-bottom: var(--space-4);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-sunken);
+}
+
+.register-bar__status {
+  font: var(--text-small);
+  color: var(--color-ink-soft);
+}
+
+.register-shift-summary {
+  margin-bottom: var(--space-4);
+}
+
+.register-summary-card {
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-3) var(--space-4);
+  margin-bottom: var(--space-4);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-sunken);
+}
+
+.register-summary-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-2) 0;
+  font: var(--text-body);
+}
+
+.register-summary-row + .register-summary-row {
+  border-top: 1px solid var(--color-line);
+}
+
+/* Cash Sales — the line the Opening Cash Fund feeds into. Never styled
+   the same as Total Sales below, so the two figures stay visually (as
+   well as arithmetically) distinct. */
+.register-summary-row--highlight {
+  color: var(--color-accent-ink);
+  font: var(--text-heading);
+}
+
+.register-summary-row--total {
+  font: var(--text-heading);
+  color: var(--color-accent-strong);
+}
+
+.register-variance-note {
+  padding-top: var(--space-2);
+  font: var(--text-small);
+  color: var(--color-ink-soft);
+}
+
 /* POS: layout */
 .pos-layout {
   display: flex;

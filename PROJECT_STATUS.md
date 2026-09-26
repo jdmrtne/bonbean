@@ -2,11 +2,84 @@ Project:
 Coffee Cart POS (bon&bean)
 
 Current Phase:
-PHASE 10 — Final QA + Release
+PHASE 12 — Open/Close Register with a Cash Fund
 
 Status:
-COMPLETE (code + manual review), WITH AN IMPORTANT CAVEAT — this
-session had no working npm registry access (`npm install` fails with a
+COMPLETE. Full toolchain access this session (npm install/tsc/oxlint/
+vite build/smoke-test all ran for real, unlike Phase 10's session) —
+see "Verification done" below.
+
+Completed:
+
+* **Register sessions.** New `RegisterSession` type (`src/types/index.ts`),
+  a new `registerSessions` IndexedDB store (`DB_VERSION` 4→5,
+  `database/db.ts`), and `services/registerService.ts`
+  (openRegister/closeRegister/getOpenSession/listRegisterSessions). Only
+  one session can be open at a time.
+* **Open Register gate.** `PosPage.tsx` now requires an open register
+  session before the product grid/cart render at all — `OpenRegisterGate`
+  (new) prompts for the Opening Cash Fund and blocks every other POS
+  action until it's entered.
+* **Close Register.** New `CloseRegisterModal` shows the shift's payment
+  summary (via `computeSalesStats`, scoped to the session by
+  `utils/registerStats.ts`'s `filterSalesBySession`), takes Physical Cash
+  Counted, and computes: Cash Sales = Physical Cash Counted − Opening
+  Cash Fund; Total Sales = Cash Sales + every non-cash payment method's
+  shift total. The Opening Cash Fund is never subtracted from Total
+  Sales and is always labeled as its own line, never a sale/expense/
+  deduction. Also surfaces (informational only, not part of the
+  required totals) a comparison against the shift's recorded
+  cash-method sale totals, to help catch an over/short drawer.
+* **Closing report.** `utils/registerExport.ts` builds a small CSV
+  (Opening Cash Fund, Physical Cash Counted, Cash Sales, each non-cash
+  payment method, Total Sales) downloaded automatically when a register
+  closes. The existing Reports-page CSV/print export
+  (`utils/salesExport.ts`, `ReportsPage.tsx`) is completely untouched.
+* **Backup/restore.** `registerSessions` added to `buildBackupFile`/
+  `restoreBackup` (`services/backupService.ts`) and to `BackupFile`
+  (`utils/backup.ts`) as an OPTIONAL section — a backup taken before
+  this phase simply has none to restore (same as an upgraded database
+  never gets a backfilled one), rather than failing validation.
+* Scope discipline: no other POS feature, UI, payment method, order ID,
+  or existing sales-recording logic was touched — see the brief this
+  phase was built from.
+
+Verification done (real toolchain, this session):
+
+* `npm install` — succeeded.
+* `npx tsc -b` — clean, no errors.
+* `npx oxlint src` — same 6 pre-existing warnings as before this phase
+  (all in code this phase didn't touch), 0 new warnings, 0 errors.
+* `npm run build` — succeeded, produced a complete `dist/`.
+* `npm run smoke-test` — all tests pass, including new coverage added
+  this phase: register open/close guards, session-scoped sale
+  filtering, the exact Cash Sales/Total Sales formula (with a case
+  where Cash Sales deliberately does NOT equal the shift's literal cash
+  sale total, to prove it comes from the physical count), non-cash
+  breakdown by payment method name, and a register session round-trip
+  through backup/restore.
+
+Known gaps / left for manual QA:
+
+* No real browser/device click-through of the new Open/Close Register
+  screens happened this session (no headed browser here either) — click
+  through: open register → add a mix of cash/non-cash sales → close
+  register → confirm the numbers match a manual count → download and
+  check the closing CSV.
+* No dedicated "past register sessions" history view was built —
+  `listRegisterSessions()` exists in the service layer for this, but
+  nothing in the UI surfaces it yet, since it wasn't asked for.
+* The real `DB_VERSION` 4→5 migration (creating the empty
+  `registerSessions` store) has only been verified by a fresh-database
+  smoke test, not a genuine upgrade of a pre-Phase-12 database with real
+  data in it.
+
+---
+
+Previous phase (PHASE 10 — Final QA + Release):
+
+COMPLETE (code + manual review), WITH AN IMPORTANT CAVEAT — that
+session had no working npm registry access (`npm install` failed with a
 403 on every package) and therefore no headless-browser pass either
 (nothing to build/serve). Every change below was verified by careful
 manual code review — tracing call sites, checking types by hand,

@@ -9,7 +9,15 @@
 // services/backupService.ts instead; this file only shapes and validates
 // plain data.
 
-import type { Category, PaymentMethod, Product, Sale, SaleItem, Settings } from "../types";
+import type {
+  Category,
+  PaymentMethod,
+  Product,
+  RegisterSession,
+  Sale,
+  SaleItem,
+  Settings,
+} from "../types";
 import { formatDateKey } from "./date";
 
 // Bumping this is a deliberate, future decision (see HANDOFF.md) — a
@@ -28,6 +36,14 @@ export interface BackupFile {
   sales: Sale[];
   saleItems: SaleItem[];
   settings: Settings;
+  // PHASE 12: register open/close history (see types/index.ts's
+  // RegisterSession). Deliberately NOT added to RECORD_ARRAY_KEYS below —
+  // a backup taken before this feature existed simply has no register
+  // sessions to restore, same as an upgraded (not restored) database
+  // never gets a backfilled one (see database/db.ts's oldVersion < 5
+  // migration comment) — so this section is optional on read and
+  // defaults to an empty array rather than failing validation.
+  registerSessions: RegisterSession[];
 }
 
 export type BackupValidationResult =
@@ -94,6 +110,15 @@ export function validateBackupFile(raw: unknown): BackupValidationResult {
     return { valid: false, error: "Backup is missing a valid \"settings\" section." };
   }
 
+  // PHASE 12: optional section — see the BackupFile.registerSessions
+  // comment above for why this isn't in RECORD_ARRAY_KEYS. Present but
+  // malformed is still rejected (same standard as every other section);
+  // simply absent (an older backup) quietly becomes an empty array.
+  if (obj.registerSessions !== undefined && !isArrayOfRecordsWithId(obj.registerSessions)) {
+    return { valid: false, error: "Backup has an invalid \"registerSessions\" section." };
+  }
+  const registerSessions = (obj.registerSessions as RegisterSession[] | undefined) ?? [];
+
   return {
     valid: true,
     data: {
@@ -105,6 +130,7 @@ export function validateBackupFile(raw: unknown): BackupValidationResult {
       sales: obj.sales as Sale[],
       saleItems: obj.saleItems as SaleItem[],
       settings: settings as Settings,
+      registerSessions,
     },
   };
 }
