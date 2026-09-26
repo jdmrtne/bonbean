@@ -1,14 +1,19 @@
 import { useState } from "react";
+import { BackupManager } from "../components/BackupManager";
 import { CategoriesManager } from "../components/CategoriesManager";
 import { PaymentMethodsManager } from "../components/PaymentMethodsManager";
 import { ProductsManager } from "../components/ProductsManager";
 
-type Tab = "products" | "categories" | "payment-methods";
+type Tab = "products" | "categories" | "payment-methods" | "backup";
 
 const TABS: { id: Tab; label: string }[] = [
   { id: "products", label: "Products" },
   { id: "categories", label: "Categories" },
   { id: "payment-methods", label: "Payment Methods" },
+  // PHASE 7: no dedicated settings/admin screen exists yet, and this page
+  // already hosts other non-sales administrative tasks — see
+  // BackupManager.tsx's header comment for the full reasoning.
+  { id: "backup", label: "Backup" },
 ];
 
 export function ProductsPage() {
@@ -38,6 +43,7 @@ export function ProductsPage() {
       {tab === "products" && <ProductsManager />}
       {tab === "categories" && <CategoriesManager />}
       {tab === "payment-methods" && <PaymentMethodsManager />}
+      {tab === "backup" && <BackupManager />}
     </>
   );
 }

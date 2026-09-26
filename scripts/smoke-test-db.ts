@@ -320,6 +320,114 @@ async function main() {
     "buildExportFilename spells out a multi-day range",
   );
 
+  // 9. Backup + Restore (PHASE 7)
+  //
+  // Two halves, matching backupService.ts/utils/backup.ts's split:
+  //   - utils/backup.ts's validateBackupFile/serializeBackup/
+  //     buildBackupFilename are dependency-free (like section 7/8's
+  //     modules) and tested directly against hand-built payloads.
+  //   - backupService.ts's buildBackupFile/restoreBackup DO touch
+  //     IndexedDB (via getDB()), so — unlike sections 7/8 — they're
+  //     exercised here against the real db/fake-indexeddb, the same way
+  //     sections 1-6 test productsService.ts/salesService.ts.
+  const { BACKUP_FORMAT_VERSION, validateBackupFile, serializeBackup, buildBackupFilename } =
+    await import("../src/utils/backup");
+  const { buildBackupFile, restoreBackup } = await import("../src/services/backupService");
+
+  // -- Pure validation/serialization --
+  const validBackupFixture = {
+    formatVersion: BACKUP_FORMAT_VERSION,
+    exportedAt: "2026-03-18T10:00:00.000Z",
+    products: [
+      { id: "fx-p1", name: "Latte", categoryId: "fx-c1", price: 120, active: true, createdAt: "x", updatedAt: "x" },
+    ],
+    categories: [{ id: "fx-c1", name: "Drinks", active: true, sortOrder: 0 }],
+    paymentMethods: [{ id: "fx-m1", name: "Cash", active: true, sortOrder: 0 }],
+    sales: [] as unknown[],
+    saleItems: [] as unknown[],
+    settings: { businessName: "Fixture Cart", currency: "₱" },
+  };
+
+  const validResult = validateBackupFile(validBackupFixture);
+  assert(validResult.valid === true, "validateBackupFile accepts a well-formed backup");
+
+  assert(validateBackupFile(null).valid === false, "validateBackupFile rejects null");
+  assert(
+    validateBackupFile({ ...validBackupFixture, formatVersion: 99 }).valid === false,
+    "validateBackupFile rejects an unknown formatVersion",
+  );
+  assert(
+    validateBackupFile({ ...validBackupFixture, products: "nope" }).valid === false,
+    "validateBackupFile rejects a non-array products field",
+  );
+  assert(
+    validateBackupFile({ ...validBackupFixture, settings: { businessName: "X" } }).valid === false,
+    "validateBackupFile rejects settings missing currency",
+  );
+
+  const roundTripped = JSON.parse(serializeBackup(validBackupFixture as never));
+  assert(
+    validateBackupFile(roundTripped).valid === true,
+    "a serialized-then-reparsed backup still validates",
+  );
+
+  assert(
+    buildBackupFilename(new Date(2026, 2, 18)) === "coffee-cart-backup_2026-03-18.json",
+    "buildBackupFilename uses the date-stamped naming convention",
+  );
+
+  // -- Real IndexedDB round-trip: build a backup of the db's CURRENT
+  // state (already populated by sections 1-6 above), then restore it and
+  // confirm the db matches afterward. --
+  const backupBeforeRestore = await buildBackupFile();
+  assert(
+    backupBeforeRestore.formatVersion === BACKUP_FORMAT_VERSION,
+    "buildBackupFile stamps the current format version",
+  );
+  const salesBeforeBackup = await listSales();
+  assert(
+    backupBeforeRestore.sales.length === salesBeforeBackup.length,
+    "buildBackupFile's sales count matches listSales()",
+  );
+
+  // Mutate the live db AFTER taking the backup, so restoring it is a real
+  // (not no-op) round-trip: add an extra product, then restore.
+  const extraProduct = await addProduct({ name: "Muffin", categoryId: snacks.id, price: 70 });
+  const productsAfterExtra = await listProducts();
+  assert(
+    productsAfterExtra.some((p) => p.id === extraProduct.id),
+    "sanity check: the extra product exists before restoring",
+  );
+
+  await restoreBackup(backupBeforeRestore);
+
+  const productsAfterRestore = await listProducts();
+  assert(
+    !productsAfterRestore.some((p) => p.id === extraProduct.id),
+    "restoreBackup replaces products — the post-backup addition is gone",
+  );
+  assert(
+    productsAfterRestore.length === backupBeforeRestore.products.length,
+    "restoreBackup's product count matches the backup exactly",
+  );
+
+  const salesAfterRestore = await listSales();
+  assert(
+    salesAfterRestore.length === backupBeforeRestore.sales.length,
+    "restoreBackup's sales count matches the backup exactly",
+  );
+  const restoredSecondSale = salesAfterRestore.find((s) => s.id === secondSale.id);
+  assert(
+    restoredSecondSale?.items[0]?.unitPriceSnapshot === secondSale.items[0].unitPriceSnapshot,
+    "restoreBackup writes SaleItem price snapshots back exactly as backed up, not recomputed",
+  );
+
+  const settingsAfterRestore = await getSettings();
+  assert(
+    settingsAfterRestore.businessName === backupBeforeRestore.settings.businessName,
+    "restoreBackup restores settings from the backup",
+  );
+
   console.log("\nAll smoke tests passed.");
 }
 
