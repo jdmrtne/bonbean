@@ -1,4 +1,5 @@
 import { NavLink, Outlet } from "react-router-dom";
+import { StatusBanners } from "./StatusBanners";
 
 const NAV_ITEMS = [
   { to: "/", label: "POS", icon: "☕", end: true },
@@ -39,6 +40,7 @@ export function AppShell() {
       </header>
 
       <main className="app-main">
+        <StatusBanners />
         <div className="app-main__inner">
           <Outlet />
         </div>

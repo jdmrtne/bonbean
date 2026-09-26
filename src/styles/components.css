@@ -106,6 +106,30 @@
   color: var(--color-success);
 }
 
+.banner--offline {
+  background: var(--color-surface-sunken);
+  color: var(--color-ink-soft);
+}
+
+.banner--update {
+  background: var(--color-accent-wash);
+  color: var(--color-accent-ink);
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+/* Persistent status banner (offline / update available) — sits full-
+   width above the routed page content, on every screen. Not a "banner"
+   the person dismisses; it disappears on its own once the condition
+   (back online / update applied) clears. */
+.app-status-banner {
+  border-radius: 0;
+  position: sticky;
+  top: var(--topbar-height);
+  z-index: 5;
+}
+
 /* Modal / bottom sheet */
 .modal-overlay {
   position: fixed;

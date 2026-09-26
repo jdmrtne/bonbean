@@ -2,176 +2,192 @@ Project:
 Coffee Cart POS
 
 Current Phase:
-PHASE 7 — Backup + Restore
+PHASE 8 — Offline + PWA
 
 Status:
-COMPLETE, WITH THE SAME REAL CAVEAT AS PHASES 5 AND 6 — this session's
-container again had NO npm registry access (`npm ping`/`npm install` both
-fail with 403 Forbidden, confirmed fresh this session). That means
-`npm install`, `npx tsc -b`, `npm run build`, `npx oxlint`, and
-`npm run smoke-test` could NOT be run against the real project
-dependencies. This is now the FOURTH session in a row (Phases 2, 3, 5, 6,
-and now 7) without working npm access — only Phase 4's session had it.
-See "Verification done instead" and "Known bugs / verification gaps"
-below.
+COMPLETE — and, for the first time since Phase 4, VERIFIED FOR REAL.
+This session's container had working npm registry access AND a
+pre-installed headless Chromium (via Playwright, browsers already
+present at `/opt/pw-browsers`) — the first time either has been true
+since Phase 4. This means:
+
+* `npm install`, `npx tsc -b`, `npm run build`, `npx oxlint`, and
+  `npm run smoke-test` were ALL actually run against the real project
+  dependencies — first for Phases 5–7's previously-unverified code
+  (all clean), then again after this phase's changes (also all clean).
+* A REAL headless-browser click-through was done for the first time in
+  this project's history — see "Verification done" below. This finally
+  exercised Phase 7's riskiest untested item (the full-replace restore
+  round-trip) and this phase's offline behavior, with actual screenshots
+  and DOM assertions, not just code review.
+* One real, previously-undetected bug was found this way and fixed —
+  see "Bug found and fixed" below.
 
 Completed:
 
-* New `src/utils/backup.ts` — dependency-free (imports only type-only
-  `../types` and `./date`'s `formatDateKey`):
-  - `BACKUP_FORMAT_VERSION` (currently `1`) and the `BackupFile` type:
-    `{ formatVersion, exportedAt, products, categories, paymentMethods,
-    sales, saleItems, settings }` — one JSON object with one key per
-    IndexedDB store, plus the version/timestamp metadata the Phase 7
-    brief asked for so a future phase can evolve the format without
-    guessing at old files.
-  - `validateBackupFile(raw)` — checks `formatVersion` matches exactly,
-    `exportedAt` is a non-empty string, each of
-    products/categories/paymentMethods/sales/saleItems is an array of
-    objects each carrying an `id`, and `settings` has string
-    `businessName`/`currency`. Returns `{ valid: true, data }` or
-    `{ valid: false, error }` — never throws. Deliberately a shape check,
-    not a full per-record schema validator (see the file's header
-    comment for why that's the right amount of validation here).
-  - `serializeBackup(payload)` — pretty-printed (`JSON.stringify(...,
-    null, 2)`) JSON, unlike the CSV export, since a backup is meant to be
-    human-spot-checkable, not machine-summed.
-  - `buildBackupFilename(now?)` — `coffee-cart-backup_2026-03-18.json`,
-    following `salesExport.ts`'s date-stamped naming convention.
-* New `src/services/backupService.ts` — the only new file that imports
-  both `utils/backup.ts` and `database/db.ts`, same separation
-  `reportStats.ts`/`salesExport.ts` keep from their IndexedDB-touching
-  callers:
-  - `buildBackupFile()` — reads every store (`products`, `categories`,
-    `paymentMethods`, `sales`, `saleItems`, `settings`) via `getDB()` and
-    shapes them into a `BackupFile`. No filtering of inactive
-    products/categories/payment methods — a backup is a complete,
-    restorable copy, not a report.
-  - `restoreBackup(payload)` — **full replace, not a merge** (see
-    "Decisions" below for the reasoning): clears all six stores and
-    repopulates them from `payload`, all inside **one** `idb`
-    transaction (`db.transaction([...6 stores...], "readwrite")`), the
-    same multi-store-transaction shape `salesService.ts`'s
-    `recordSale`/`deleteSale` use, so a failure partway through can't
-    leave the database half-restored. Writes every `Sale`/`SaleItem`
-    field — including each item's `productNameSnapshot`/
-    `unitPriceSnapshot` — exactly as given in `payload`, never
-    recomputed from live `products` data (the same price/name-snapshot
-    rule as every prior phase). Assumes `payload` was already validated
-    by the caller.
-* New `src/components/BackupManager.tsx` — a "Back up" `Card` (button ->
-  `buildBackupFile()` -> `serializeBackup()` -> `downloadTextFile()`,
-  reusing Phase 6's download helper unchanged) and a "Restore" `Card`
-  (button opens a hidden `<input type="file">` — this codebase's first
-  file-input pattern — then: read the file's text, `JSON.parse`,
-  `validateBackupFile`; on failure, show an inline error banner and write
-  nothing; on success, an explicit `window.confirm` naming exactly what
-  will be replaced and the backup's product/sale counts and export
-  timestamp; only on confirmation does `restoreBackup()` run, followed by
-  `window.location.reload()` so every screen reflects the restored data
-  instead of stale in-memory state).
-* `src/pages/ProductsPage.tsx` extended (not rewritten) with a fourth
-  "Backup" tab alongside Products/Categories/Payment Methods, rendering
-  `BackupManager` — see "Decisions" below for why it lives here rather
-  than a new route.
-* `scripts/smoke-test-db.ts` extended with a "9. Backup + Restore"
-  section: `validateBackupFile`'s accept/reject cases (well-formed,
-  null, wrong `formatVersion`, non-array section, incomplete `settings`),
-  a serialize-then-reparse-still-validates round-trip,
-  `buildBackupFilename`'s naming convention, and — unlike sections 7/8 —
-  a REAL IndexedDB round-trip: `buildBackupFile()` the db's current
-  state, mutate the live db afterward (add a product), `restoreBackup()`
-  that earlier snapshot, then confirm the mutation is gone and every
-  store's contents (including a `SaleItem` price snapshot) match the
-  backup exactly.
+* `public/manifest.webmanifest` — `name`/`short_name`/`description`,
+  `start_url: "/#/"` (matches `HashRouter`), `display: "standalone"`,
+  `background_color`/`theme_color` matching `theme.css`'s tokens
+  (`#f5f4f1` / `#23201b`), and three icons (192, 512, and a 512
+  maskable variant with safe-zone padding).
+* `public/icons/icon-192.png`, `icon-512.png`, `icon-512-maskable.png`
+  — rasterized from the existing `public/favicon.svg` using `cairosvg`
+  (installed via `pip`, no new npm dependency) plus a small Pillow
+  composite step for the maskable variant's safe-zone padding.
+* `public/sw.js` — a hand-written service worker (no `vite-plugin-pwa`
+  or other new npm dependency — see "Decisions" in HANDOFF.md): a fixed
+  precache list of unhashed, author-known URLs (`/`, `/index.html`,
+  `/manifest.webmanifest`, `/favicon.svg`, the two non-maskable icons)
+  on `install`, then cache-first for everything else at runtime
+  (opportunistically caching whatever wasn't precached — this is how
+  Vite's hashed build output ends up cached without a build-time
+  precache manifest). Navigation requests are served from the cached
+  `/index.html` first, matching `HashRouter`'s single-document model.
+  Does NOT call `self.skipWaiting()` on install — a new version only
+  takes over once the person taps the update banner's "Reload to
+  update" button.
+* `src/pwa/registerServiceWorker.ts` — registers `public/sw.js` (only
+  called from `main.tsx` when `import.meta.env.PROD`, so `vite dev`'s
+  own HMR is never fought with a cache-first worker), and dispatches a
+  `coffee-cart-pos:sw-update-available` window event when a new worker
+  is installed and waiting, plus `applyServiceWorkerUpdate()` (posts
+  `SKIP_WAITING` to the waiting worker) for the update banner's button.
+* `src/hooks/useOnlineStatus.ts` and `src/hooks/useServiceWorkerUpdate.ts`
+  — small hooks wrapping `navigator.onLine`/the `online`/`offline`
+  events, and the update-available event, respectively.
+* `src/components/StatusBanners.tsx` — renders an offline banner
+  ("You're offline — sales still record and save on this device.") or,
+  when online and a new version is waiting, an update banner with a
+  "Reload to update" button. Mounted once in `AppShell.tsx`, above the
+  routed page content, so it's visible from every screen. Offline takes
+  priority over the update prompt (no point offering a reload that
+  can't fetch anything).
+* `index.html` — added `<link rel="manifest">`, `<link
+  rel="apple-touch-icon">`, and `apple-mobile-web-app-capable`/
+  `apple-mobile-web-app-title` meta tags (iOS's manifest support is
+  partial; these are still needed for a clean "Add to Home Screen").
+* `src/main.tsx` — calls `registerServiceWorker()` guarded by
+  `import.meta.env.PROD`.
+* `src/styles/components.css` — `.banner--offline`, `.banner--update`,
+  and `.app-status-banner` (sticky, full-width, sits right below the
+  topbar).
+* `scripts/smoke-test-db.ts` — a short section 10 comment (not fake
+  tests) explaining why offline/PWA logic has no pure extractable logic
+  to smoke-test, the same reasoning `utils/download.ts` (Phase 6) got.
 
-No new CSS was needed — `BackupManager.tsx` reuses Phase 6's
-`.export-card__hint`/`.export-actions`/`.dashboard__section-title` and
-this project's existing `banner`/`banner--danger`/`banner--success`
-classes as-is.
+Bug found and fixed (pre-existing, NOT introduced this phase):
 
-Verification done instead (no npm registry access this session):
+* `src/styles/layout.css`'s `.app-sidebar` had NO default (mobile) rule
+  — it was only styled inside the `@media (min-width: 860px)` block.
+  On any phone-width screen, the sidebar (with the "Coffee Cart"
+  brand and four nav links) rendered as an unstyled `<aside>` of
+  default blue underlined links, stacked above the topbar, WHILE the
+  intended bottom tab bar also rendered — duplicate, broken-looking
+  navigation on every mobile screen, in every phase since Phase 0.
+  Nobody had loaded this app in a real browser before this session, so
+  it was never seen. Fixed with one rule: `.app-sidebar { display:
+  none; }` above the desktop media query (mirroring how `.app-tabbar`
+  is already hidden only inside that same media query). Verified fixed
+  with a real 390×844 mobile-viewport screenshot, before and after.
+* Side effect of the fix, NOT further addressed this phase (documented
+  as a known cosmetic gap, not fixed, to stay in scope): with the
+  sidebar correctly hidden on mobile, there is now NO visible "Coffee
+  Cart" brand/logo anywhere on a phone screen — `app-topbar` only ever
+  rendered the tagline ("Sales recording, made simple"), not the
+  brand mark, which previously (accidentally) leaked in from the
+  broken sidebar. Not a regression from working code — this brand gap
+  existed since Phase 0/2, just masked by the sidebar bug. Left for a
+  future phase (Phase 9's "Polish + Mobile UX" is the natural place).
 
-* `utils/backup.ts`'s pure logic — `validateBackupFile` (accept + 9
-  reject/edge cases), `serializeBackup`'s round-trip, and
-  `buildBackupFilename` — was extracted into a standalone script and run
-  directly with the globally-installed `tsx` (needs no `node_modules`,
-  since the module has no external import). Every assertion passed. The
-  same assertions now live in `smoke-test-db.ts` section 9's first half.
-* `npx tsc --strict` (globally-installed `tsc`) was run directly against
-  `utils/backup.ts` plus `utils/date.ts`/`types/index.ts` for context —
-  zero errors. Sanity-checked by deliberately injecting a type error
-  (`BACKUP_FORMAT_VERSION: string = 1`) into a scratch copy and
-  confirming `tsc` actually caught it (it did), so the clean result is a
-  real, if partial, signal.
-* `backupService.ts` (which imports `idb` via `database/db.ts`) and
-  `BackupManager.tsx`/`ProductsPage.tsx` (React) could NOT be
-  type-checked this way — same gap as Phase 5's/6's `ReportsPage.tsx`.
-  Manual review only: brace/paren/bracket balance was checked
-  programmatically for all four new/changed files (all balanced), and
-  `BackupManager.tsx`'s JSX was read by hand for balanced
-  tags/fragments, hooks called unconditionally (no hooks after an early
-  return), and `Button`/`Card` props matching their actual component
-  signatures (`Button`'s `variant`/`disabled`/`onClick`; `Card`'s
-  `style`/`children`) — both confirmed against the real component files.
-* `smoke-test-db.ts`'s new section 9 (including the real-IndexedDB
-  round-trip half) was written but **NOT executed** — it needs
-  `fake-indexeddb`/`idb` from `node_modules`, neither installed. Running
-  `tsx scripts/smoke-test-db.ts` this session fails immediately with
-  `Cannot find package 'fake-indexeddb'`, confirmed and shown in this
-  session's own log — the same failure Phases 5/6 hit for the full
-  suite.
+Verification done (real toolchain + real browser, both available this
+session for the first time since Phase 4):
+
+* `npm install` — succeeded (41 packages, 0 vulnerabilities).
+* `npx tsc -b` — clean, both BEFORE this phase's changes (verifying
+  Phases 5–7's previously-unverified TypeScript for the first time) and
+  AFTER.
+* `npm run build` (`vite build`) — succeeded both times; confirmed
+  `manifest.webmanifest`, `sw.js`, and `icons/` all land in `dist/` as
+  expected (public/ files copy through as-is).
+* `npx oxlint` — 0 errors both times. 5 pre-existing warnings, all in
+  Phase 1–4 files (`ProductsManager.tsx`, `PaymentMethodsManager.tsx`,
+  `CategoriesManager.tsx`, `HistoryPage.tsx` — `setState` synchronously
+  inside a data-loading `useEffect`, a long-standing pattern), unrelated
+  to Phases 5–8; zero new warnings from any of this phase's files.
+* `npm run smoke-test` — ALL assertions passed, including, for the
+  first time ever, section 9's real-IndexedDB backup/restore round-trip
+  (Phase 7's biggest unverified risk).
+* **A real headless-browser click-through**, via Playwright (Chromium
+  already present at `/opt/pw-browsers` in this container — no network
+  access to Playwright's CDN was needed or available) against a served
+  `vite preview` build:
+  - Added a category and a product, rang up a sale with a real cash
+    amount, confirmed it in Sales History and the dashboard totals.
+  - Exported a real backup file via the Backup tab and inspected its
+    parsed JSON contents.
+  - Went offline (`context.setOffline(true)`) and reloaded: the app
+    shell, nav, and every route (`/#/`, `/#/products`, `/#/history`)
+    still loaded fully, with the offline banner visible. Rang up a
+    SECOND sale entirely offline and confirmed it wrote to IndexedDB
+    and appeared in the dashboard (₱240 total / 2 transactions).
+  - Went back online and restored the FIRST backup (taken before the
+    offline sale) through the real file-input UI, confirmed via
+    `window.confirm`, and verified Sales History afterward showed
+    exactly the pre-offline-sale snapshot (₱120 / 1 transaction) — the
+    offline-only sale was correctly discarded by the full-replace
+    restore. This is real, first-ever confirmation that Phase 7's
+    restore logic behaves correctly end-to-end, not just in a
+    fake-indexeddb unit test.
+  - Checked Chrome's own `Page.getInstallabilityErrors` via CDP:
+    returned an empty array — the manifest + service worker meet
+    Chrome's baseline install criteria.
+  - Took a 390×844 mobile-viewport screenshot (both online and
+    offline) and found/fixed the sidebar bug above.
 
 Current functionality:
 
-* From the Products screen's new "Backup" tab: a "Back up" button that
-  downloads a single dated JSON file containing every product, category,
-  payment method, sale, and setting on the device; and a "Restore from
-  file…" button that accepts a previously-exported backup file, validates
-  it, asks for explicit confirmation naming exactly what will be
-  replaced, and — only if confirmed — replaces all current data with the
-  file's contents and reloads the page.
-* Everything from Phases 0–6 (POS/cart, sales recording, Sales History +
-  dashboard, Reports' date-range totals/breakdown/product performance,
-  CSV + print/PDF export) unchanged — no existing file's logic was
-  deleted or altered, only `ProductsPage.tsx` was extended with a new
-  tab.
+* Everything from Phases 0–7 (POS/cart, sales recording, Sales History
+  + dashboard, Reports, CSV + print/PDF export, Backup + Restore)
+  confirmed unchanged and now confirmed WORKING both online and
+  offline by a real click-through, not just code review.
+* The app installs as a standalone PWA (manifest + service worker meet
+  installability criteria) and loads fully offline after one successful
+  visit — app shell, all four routes, and IndexedDB reads/writes
+  (adding a sale, viewing history) all confirmed working with the
+  network disabled.
+* An offline banner appears on every screen while offline; an update
+  banner appears when a new deployed version is waiting to activate.
 
 Known bugs / verification gaps:
 
-* **No automated checks were run this phase either** —
-  `npm install`/`tsc -b`/`build`/`oxlint`/the full `smoke-test` suite
-  remain UNVERIFIED against the actual project dependencies for a
-  fourth/fifth consecutive phase (only Phase 4 had working npm access).
-  `backupService.ts`, `BackupManager.tsx`, and `ProductsPage.tsx`'s
-  changes have only been manually reviewed, never compiled by the
-  project's real `tsc`/React types, and section 9's real-IndexedDB
-  round-trip test has never actually been run.
-* **Manual click-through has still not been done** — now carried across
-  Phases 2–7. For Backup/Restore specifically: nobody has exported a
-  real backup file, inspected its contents, and restored it in a
-  real/headed browser to confirm the app reflects the restored data
-  afterward. This is the single most important thing to verify before
-  trusting Restore with real data, since it's the first genuinely
-  destructive action in this app.
-* **`restoreBackup`'s full-replace behavior has only been reasoned
-  about, never watched happen.** The logic (clear then repopulate all
-  six stores in one transaction) mirrors `recordSale`/`deleteSale`'s
-  already-working pattern, but a multi-store `clear()` + bulk `put()`
-  transaction is a new shape for this codebase and deserves an actual
-  click-through, not just code review.
-* The hidden `<input type="file">` pattern in `BackupManager.tsx` is
-  this codebase's first file input — untested on a real mobile browser's
-  file picker (Android/iOS variants can differ in how they present
-  "choose a JSON file").
-* No format-version MIGRATION path exists yet — `validateBackupFile`
-  rejects anything that isn't exactly `formatVersion: 1` rather than
-  attempting to upgrade an older file. Fine for now (there's only ever
-  been one format), but worth remembering if a future phase changes the
-  backup shape.
-* (Carried) Everything in Phase 6's "Known bugs" list, including the
-  still-outstanding manual click-through for Phases 2–6's own features.
+* **The mobile topbar has no visible app branding** — see "Bug found
+  and fixed" above. Cosmetic only; navigation and functionality are
+  unaffected (the bottom tab bar works correctly). Natural fit for
+  Phase 9 — Polish + Mobile UX.
+* **The service worker's cache version (`CACHE_VERSION` in
+  `public/sw.js`) must be bumped manually on any deploy that changes a
+  cached file** — there's no automatic content-hash-based cache
+  busting without adding a build plugin (the same no-new-dependency
+  trade-off Phase 6 made for PDF export). Documented in `sw.js`'s own
+  header comment; easy to forget in a future phase.
+* **The update banner's actual "new version" flow was reasoned about
+  and code-reviewed, but not end-to-end tested** — that would require
+  deploying two different builds behind the same origin and watching a
+  live tab pick up the second one, which wasn't practical in this
+  session's single-build test setup. The underlying browser mechanism
+  (`updatefound` → `installed` + existing controller → banner →
+  `SKIP_WAITING` → `controllerchange` → reload) is standard and
+  code-reviewed, but flagged here as the one PWA piece not watched
+  happen for real.
+* Real mobile DEVICE testing (as opposed to a desktop browser's mobile
+  viewport emulation) still hasn't happened — touch interactions,
+  actual "Add to Home Screen" flows on iOS/Android, and real
+  intermittent-connectivity behavior (as opposed to Playwright's
+  instant online/offline toggle) remain unverified.
+* (Carried, now largely addressed by this session's click-through, but
+  worth re-confirming on a real device) Phase 7's file-input picker UI
+  on a real mobile browser's native file picker.
 
 Next phase:
 
-PHASE 8 — Offline + PWA
+PHASE 9 — Polish + Mobile UX

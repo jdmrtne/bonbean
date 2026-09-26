@@ -5,6 +5,17 @@
   background: var(--color-bg);
 }
 
+/* Mobile: sidebar nav is replaced by the bottom tab bar (.app-tabbar).
+   Hidden by default here; the desktop media query below turns it back
+   on with `display: flex` and hides .app-tabbar instead. Missing this
+   rule left the sidebar rendering as an unstyled <aside> of default
+   blue underlined links stacked above the topbar on every phone-width
+   screen — found during PHASE 8's first-ever real-browser click-through
+   (no headed browser existed in any earlier session to catch this). */
+.app-sidebar {
+  display: none;
+}
+
 .app-topbar {
   height: var(--topbar-height);
   flex: 0 0 auto;

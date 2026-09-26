@@ -3,9 +3,16 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="apple-touch-icon" href="/icons/icon-192.png" />
+    <link rel="manifest" href="/manifest.webmanifest" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="theme-color" content="#23201b" />
     <meta name="description" content="Coffee Cart POS — a simple, fast, offline-capable sales recording app." />
+    <!-- iOS ignores the web app manifest's own install/standalone behavior
+         (Safari support is partial), so these two tags are still needed
+         for "Add to Home Screen" to open without Safari's browser chrome. -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Coffee Cart" />
     <title>Coffee Cart POS</title>
   </head>
   <body>

@@ -54,8 +54,14 @@ src/
   services/     data-access / business-logic modules (added from Phase 1 on)
   hooks/        shared React hooks
   utils/        small pure helper functions
+  pwa/          service worker registration + update-available bridge (Phase 8)
   types/        shared TypeScript types for the domain model
   styles/       theme.css (tokens), layout.css (app shell), components.css
+
+public/
+  sw.js                    hand-written service worker (Phase 8)
+  manifest.webmanifest     PWA manifest (Phase 8)
+  icons/                   192/512/512-maskable PNG icons, rasterized from favicon.svg
 ```
 
 ## Design direction

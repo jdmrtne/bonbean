@@ -429,6 +429,19 @@ async function main() {
   );
 
   console.log("\nAll smoke tests passed.");
+
+  // 10. Offline + PWA (PHASE 8) — intentionally NOT covered here.
+  // public/sw.js, src/pwa/registerServiceWorker.ts, and
+  // src/hooks/useOnlineStatus.ts/useServiceWorkerUpdate.ts are all
+  // browser-API surface (ServiceWorkerContainer, CacheStorage,
+  // navigator.onLine, the online/offline events) with no pure,
+  // dependency-free logic to extract — the same reason utils/download.ts
+  // (Phase 6) has no smoke-test coverage either. sw.js in particular is
+  // plain JS served as a static /public asset, not compiled by this
+  // project's tsc/Vite pipeline, so it can't import from src/ or be
+  // exercised by a tsx script at all. This is a manual click-through
+  // item (see HANDOFF.md "Testing Status"): load the app once online,
+  // then go offline and confirm it still loads.
 }
 
 main().catch((err) => {
