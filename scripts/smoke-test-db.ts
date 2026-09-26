@@ -56,7 +56,39 @@ async function main() {
   const allProducts = await listProducts(true);
   assert(allProducts.length === 1, "deactivated product still present when includeInactive=true");
 
-  // 4. Settings update
+  // 4. Sales recording + price/name snapshot independence (PHASE 3)
+  const { recordSale } = await import("../src/services/salesService");
+  const croissant = await addProduct({ name: "Croissant", categoryId: snacks.id, price: 85 });
+
+  const sale = await recordSale({
+    lines: [
+      { productId: latte.id, name: "Iced Latte", unitPrice: 150, quantity: 2 },
+      { productId: croissant.id, name: croissant.name, unitPrice: croissant.price, quantity: 1 },
+    ],
+    paymentMethod: "Cash",
+    amountReceived: 500,
+    change: 500 - (150 * 2 + 85),
+  });
+
+  assert(sale.total === 150 * 2 + 85, "sale total is the sum of line totals");
+  assert(sale.items.length === 2, "sale has one SaleItem per cart line");
+  assert(sale.change === 500 - (150 * 2 + 85), "change = amountReceived - total");
+
+  const db = await getDB();
+  const storedSale = await db.get("sales", sale.id);
+  assert(storedSale !== undefined, "sale persisted in the sales store");
+  const storedItems = await db.getAllFromIndex("saleItems", "by-saleId", sale.id);
+  assert(storedItems.length === 2, "both sale items persisted in the flat saleItems store");
+
+  // Now change the croissant's price AFTER the sale — the saved sale must
+  // keep showing what the customer actually paid, not the new price.
+  await updateProduct(croissant.id, { price: 95 });
+  const reReadSale = await db.get("sales", sale.id);
+  const reReadItem = reReadSale?.items.find((i) => i.productId === croissant.id);
+  assert(reReadItem?.unitPriceSnapshot === 85, "SaleItem price snapshot unchanged after product price update");
+  assert((await db.get("products", croissant.id))?.price === 95, "live product price did update (snapshot is independent, not stale data)");
+
+  // 5. Settings update
   await updateSettings({ businessName: "Test Cart" });
   const updated = await getSettings();
   assert(updated.businessName === "Test Cart", "settings update persists");

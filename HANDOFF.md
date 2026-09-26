@@ -2,7 +2,7 @@
 
 ## Current Phase
 
-PHASE 2 — COMPLETE (code-complete; real-browser/device verification still outstanding — see "Testing Status")
+PHASE 3 — COMPLETE (code-complete; real-browser/device verification still outstanding — see "Testing Status")
 
 ## Overall Project Progress
 
@@ -10,7 +10,7 @@ PHASE 2 — COMPLETE (code-complete; real-browser/device verification still outs
 PHASE 0  — Project Foundation           — COMPLETE
 PHASE 1  — Database + Product Mgmt      — COMPLETE
 PHASE 2  — POS + Cart                   — COMPLETE (pending human verification)
-PHASE 3  — Sales Recording              — NOT STARTED
+PHASE 3  — Sales Recording              — COMPLETE (pending human verification)
 PHASE 4  — Sales History + Dashboard    — NOT STARTED
 PHASE 5  — Reports                      — NOT STARTED
 PHASE 6  — Excel + PDF Export           — NOT STARTED
@@ -22,258 +22,263 @@ PHASE 10 — Final QA + Release           — NOT STARTED
 
 ## What Has Been Built
 
-Everything from Phases 0–1 (app shell, routing, design tokens, IndexedDB
-schema, Product/Category/Payment Method management), **plus**, from Phase 2:
+Everything from Phases 0–2 (app shell, routing, design tokens, IndexedDB
+schema, Product/Category/Payment Method management, the POS product grid
+and cart), **plus**, from Phase 3:
 
-- A working POS screen (`src/pages/PosPage.tsx`) with category tabs, a
-  touch-friendly product grid, and a cart with an always-correct running
-  total.
-- A new `useCart` hook (`src/hooks/useCart.ts`) holding in-memory cart
-  state, built on the `CartLine` type that already existed in
-  `src/types/index.ts` since Phase 0.
-- A new shared `CartPanel` component (`src/components/CartPanel.tsx`) that
-  renders the cart's contents, used identically by the desktop cart column
-  and the mobile bottom sheet.
-- Resolution of the one open question left at the end of Phase 1: a
-  product whose category has been deactivated is now filtered out of the
-  POS grid, the same as an inactive product.
-- New CSS in `src/styles/components.css` for all of the above, built
-  entirely from the existing design tokens (no new colors, fonts, or
-  breakpoints introduced — reuses the 860px breakpoint from `layout.css`).
+- A new `salesService.ts` that writes a `Sale` + its `SaleItem`s from the
+  cart in one IndexedDB transaction.
+- A new `CheckoutModal.tsx` handling payment method selection, cash
+  received + change calculation, validation, saving, and a confirmation
+  screen.
+- The Phase 2 "Continue to Payment" placeholder button is now wired to
+  this real flow.
+- `scripts/smoke-test-db.ts` extended with a sales round-trip test that
+  specifically verifies the price-snapshot rule (the one thing that can't
+  be checked any other way without a headed browser).
 
-Still not built: payment selection, saving a sale, sales history,
-dashboard, reports, exports, backup/restore, offline/PWA support. Those are
-Phases 3–8, in order.
+Still not built: sales history, dashboard stats, reports, exports,
+backup/restore, offline/PWA support. Those are Phases 4–8, in order.
 
 ## Current Architecture
 
-Unchanged from Phases 0–1 (React 19 + TypeScript + Vite, `idb` over
-IndexedDB, `HashRouter`, plain CSS with design tokens, self-hosted Manrope
-font). Additions this phase:
+Unchanged from Phases 0–2. Additions this phase:
 
-- **Cart state:** `src/hooks/useCart.ts` is a plain hook (`useState` +
-  `useMemo`), following the "no state management library" pattern set in
-  Phase 1 — no Redux/Zustand introduced. It exposes `lines`, `itemCount`,
-  `total`, and `addProduct`/`increase`/`decrease`/`removeLine`/`clear`.
-  `addProduct` takes a minimal `CartableProduct` shape (`id`, `name`,
-  `price`) rather than the full `Product` type, so the hook doesn't need to
-  import database/service types — any object with those three fields
-  works, including a real `Product`.
-- **Cart is in-memory only, not persisted to IndexedDB.** The Phase 2 brief
-  explicitly allowed this ("your call, document it either way"). Decision:
-  keep it in memory for now. A page reload during an order loses the draft
-  cart. Revisit only if a real owner reports this being a problem in
-  practice — don't add IndexedDB persistence speculatively.
-- **`CartPanel` is shared, not duplicated**, between the desktop column and
-  the mobile bottom sheet. It takes `{ cart: UseCartResult; currency:
-  string }` and renders the same markup either way; the *container* around
-  it (a plain sticky `<div>` on desktop, the existing Phase 1 `Modal` on
-  mobile) is what differs, controlled entirely by CSS media queries plus
-  one piece of React state (`cartSheetOpen`) that only matters below the
-  860px breakpoint.
-- **Reused the Phase 1 `Modal` component for the mobile cart sheet**,
-  exactly as HANDOFF.md suggested it might be reused for — no second modal
-  implementation was built.
-- **Category tabs are a horizontal scroller of pill buttons**, not the
-  fixed `.segmented` control from Phase 1's Products tab — chosen because
-  the owner can add an unbounded number of categories over time, and a
-  scroller degrades better than a fixed-width control at, say, 8+
-  categories. An "All" tab is included and is the default selection.
+- **`salesService.recordSale(input)`** takes `{ lines: CartLine[],
+  paymentMethod: string, amountReceived?, change?, notes? }` and returns
+  the saved `Sale`. It builds one `SaleItem` per `CartLine`, computing
+  `lineTotal` and the sale's `total` itself — the caller (currently only
+  `CheckoutModal`) never computes totals independently, so there's one
+  source of truth for "what does this sale add up to."
+  - Writes both the embedded `Sale.items` array and the flat `saleItems`
+    store in a single `db.transaction(["sales", "saleItems"], "readwrite")`
+    — mirrors the multi-write transaction pattern already used by
+    `categoriesService.moveCategory`/`paymentMethodsService.movePaymentMethod`,
+    just across two stores instead of two records in one store.
+  - Throws if `lines` is empty — `CheckoutModal` can only be reached from
+    a non-empty cart in the current UI, but the service itself doesn't
+    trust that and guards independently.
+- **`CheckoutModal` reads `paymentMethods` and `currency` as props**
+  (loaded once by `PosPage` alongside categories/products/settings, in the
+  same `Promise.all` as before) rather than fetching them itself — keeps
+  data-loading centralized in the page, consistent with how `PosPage`
+  already handed `currency` down to `CartPanel`.
+- **"Is this payment method cash?" is decided by name match**
+  (`name.trim().toLowerCase() === "cash"`), not a stored flag — see the
+  comment directly above `isCashMethod()` in `CheckoutModal.tsx` for the
+  full reasoning and the known limitation (an owner renaming "Cash" loses
+  the cash-specific fields for it).
+- **Two-screen modal, one component.** `CheckoutModal` renders the
+  payment-selection form until `recordSale` succeeds, then switches to a
+  confirmation screen inside the *same* `<Modal>` mount (via a
+  `savedSale` state flag) rather than closing one modal and opening
+  another — avoids a flash of no-modal between the two steps.
+- **`cart.clear()` happens on the confirmation screen's "New sale"
+  button**, not immediately after `recordSale` resolves — so the owner
+  still sees exactly what they just sold (and the change due) before the
+  cart resets. `PosPage` doesn't need to know this happened; it just gets
+  `onDone()` called, which closes the checkout modal, and the cart being
+  empty naturally hides the floating bar and shows `CartPanel`'s empty
+  state.
 
 ## Important Files
 
-Everything listed in Phases 0–1's handoff still applies. New/changed this
-phase:
+Everything in Phases 0–2's handoff still applies. New/changed this phase:
 
-`src/pages/PosPage.tsx`
-→ **Rewritten.** Loads active categories, active products (further filtered
-to only those whose category is also active), and settings (for the
-currency symbol) on mount. Renders category tabs, the product grid, the
-desktop cart column, the mobile floating bar, and the mobile cart sheet
-modal. Tapping a product calls `cart.addProduct(product)`. The "Continue to
-Payment" button inside `CartPanel` is a disabled placeholder — Phase 3 must
-wire it to payment selection and sale-saving; it does not yet call
-anything.
+`src/services/salesService.ts`
+→ New. `recordSale(input): Promise<Sale>`. See "Current Architecture"
+above. Phase 4 (sales history) will read from the `sales` store directly
+(likely a new `listSales`/`getSale`/`deleteSale` set of functions in this
+same file, following the existing service pattern) — don't move sale-
+reading logic into a different file than sale-writing logic without good
+reason.
 
-`src/hooks/useCart.ts`
-→ New. `useCart()` → `{ lines, itemCount, total, addProduct, increase,
-decrease, removeLine, clear }`. See "Current Architecture" above. Phase 3
-should probably keep using this same hook for the active order rather than
-inventing new cart state, and only add sale-saving logic (in a new
-`salesService.ts`, per Phase 1's HANDOFF.md guidance) that *reads* the
-cart's `lines`/`total` at the moment "Save Sale" is tapped, then calls
-`cart.clear()` on success.
+`src/components/CheckoutModal.tsx`
+→ New. Props: `{ cart: UseCartResult; currency: string; paymentMethods:
+PaymentMethod[]; onClose: () => void; onDone: () => void }`. `onClose` is
+"cancel, go back to the order" (cart untouched); `onDone` is "the sale
+flow is finished" (called after the owner dismisses the confirmation
+screen, by which point `cart.clear()` has already run inside this
+component). Phase 4 has no reason to touch this file.
 
 `src/components/CartPanel.tsx`
-→ New. Renders an `EmptyState` when the cart is empty, otherwise the line
-list (name, unit price, quantity stepper, line total, remove button), the
-total, a "Clear cart" button, and the disabled "Continue to Payment"
-placeholder. Takes `{ cart: UseCartResult; currency: string }`. Phase 3
-will likely need to add a real `onCheckout` callback prop here (or replace
-the placeholder button with a working one) rather than editing this file's
-internals — keep the line-list rendering as-is if it still works.
+→ Changed. Now takes a required `onCheckout: () => void` prop (was: a
+disabled placeholder button with no prop). `PosPage.tsx` supplies
+`openCheckout` to both the desktop and mobile instances of `CartPanel`.
 
-`src/styles/components.css`
-→ Extended (not rewritten) with a new section: `.pos-layout`,
-`.category-tabs*`, `.product-grid`, `.product-tile*`, `.pos-cart-panel*`,
-`.cart-panel*`, `.cart-line*`, `.qty-stepper*`, `.pos-floating-bar`. All
-new rules sit together in one block, right before the pre-existing "Page
-header" section — see the file for the exact boundary if you need to find
-where Phase 2's CSS starts and ends.
+`src/pages/PosPage.tsx`
+→ Changed. Now also loads payment methods (`listPaymentMethods(false)`,
+alongside categories/products/settings in the same `Promise.all`) and
+holds `checkoutOpen` state. `openCheckout()` closes the mobile cart sheet
+first (so the two modals never stack) before opening `CheckoutModal`.
+
+`scripts/smoke-test-db.ts`
+→ Extended with a "4. Sales recording + price/name snapshot independence"
+section: records a 2-line sale (reusing the Phase 1 `latte` product plus a
+new `croissant` product), asserts the sale's total/change and that both
+the embedded and flat item stores got written, then updates the
+croissant's price *after* the sale and asserts the saved `SaleItem` is
+unaffected while the live `Product` did change. This is the only place the
+price-snapshot rule is actually verified this phase (no headed browser was
+available — see "Testing Status").
 
 ## Database Structure
 
-Unchanged from Phase 1. The cart itself has no database representation —
-see "Current Architecture" above for why. `sales`/`saleItems` stores still
-exist (empty) waiting for Phase 3.
+Unchanged from Phase 1 — `sales`/`saleItems` are now actually written to,
+using exactly the schema Phase 1 built (see Phase 1's original notes,
+still accurate, in the git history of this file if you need the full
+field list). No migration was needed this phase.
 
 ## Completed Features
 
-- POS product grid with category tabs (including an "All" tab), active
-  filtering (product AND its category must both be active), touch-friendly
-  tiles showing name/price/photo
-- Cart: add (tap product), increase, decrease (removes line at 0), remove
-  directly, clear, per-line and running totals, all always in sync
-- Mobile floating "VIEW ORDER — {total}" bar + bottom-sheet cart review
-- Desktop always-visible cart column, no floating bar
-- Visible but non-functional "Continue to Payment" placeholder (Phase 3
-  makes it real)
-- (Carried from Phases 0–1) product/category/payment-method management,
-  responsive app shell, IndexedDB schema, error boundary
+- Payment method selection (button list, not a dropdown)
+- Cash received + live change calculation, shown only for a "Cash"-named
+  payment method; validated against the total before saving
+- Non-cash payment methods save with no `amountReceived`/`change` (treated
+  as paid in full, no change due)
+- Sale + SaleItem(s) saved atomically with price/name snapshots frozen at
+  sale time
+- Confirmation screen (total + change due) → "New sale" clears the cart
+- (Carried from Phases 0–2) product/category/payment-method management,
+  POS product grid + cart, responsive app shell, IndexedDB schema, error
+  boundary
 
 ## Known Issues
 
-- **This phase's code has not been run, built, type-checked, or linted.**
-  This session's container has no network egress — `npm install` failed
-  outright with a 403 from the npm registry (see "Testing Status" below
-  for the exact command/error). None of `npm run dev`, `npm run build`,
-  `npx tsc -b`, `npx oxlint`, or `npm run smoke-test` could be executed.
-  **The next session (or the project owner, locally) must run these before
-  trusting this phase.** If any of them surface an error, fix it before
-  starting Phase 3 — don't assume this phase's code is correct just
-  because it's now documented as "COMPLETE".
-- As a partial substitute, every new/changed file (`useCart.ts`,
-  `CartPanel.tsx`, `PosPage.tsx`) was passed through `esbuild` (found
-  already installed as a transitive dependency of the `tsx` devDependency
-  in this environment) for a syntax check, and the entire app was
-  bundle-resolved from `src/main.tsx` with only real npm packages
-  (`react`, `react-dom`, `react-router-dom`, `idb`, `@fontsource/*`)
-  externalized, confirming every relative import path and export/import
-  name lines up across the whole app. This is **not** equivalent to
-  `tsc`'s type-checking (it doesn't catch type mismatches) and is not a
-  substitute for a real browser — treat it as a weak signal only.
-- Manual click-through (switch categories, tap products, adjust quantities
-  every way, verify totals, check both mobile- and desktop-width windows,
-  check long product names / larger peso amounts) as requested by the
-  Phase 2 brief has **not been done** — no headed browser or real device is
-  available in this environment. Do this before/during Phase 3.
-- No confirmation dialog before "Clear cart" — deliberate, see "Decisions
-  Already Made" below.
-- Cart state is lost on page reload (in-memory only) — deliberate for now,
-  see "Current Architecture" above.
-- (Carried from Phase 1) No UI yet for editing `settings`
-  (businessName/currency).
+- **This phase's code has not been run, built, type-checked, or linted**,
+  for the same reason as Phase 2 — this session's container has no
+  network egress (`npm install` was retried at the start of this phase and
+  still returns a 403 from the npm registry; see "Testing Status" for the
+  exact error). None of `npm run dev`, `npm run build`, `npx tsc -b`,
+  `npx oxlint`, or `npm run smoke-test` could be executed.
+  **Whoever picks up Phase 4 must run all of these — including the
+  extended smoke test, which has never actually been executed — before
+  trusting Phase 3's code.**
+- As a partial substitute: every new/changed file (`salesService.ts`,
+  `CheckoutModal.tsx`, the edits to `CartPanel.tsx`/`PosPage.tsx`, and the
+  extended `smoke-test-db.ts`) was syntax-checked with `esbuild`, and both
+  the full app (from `src/main.tsx`) and the smoke test script (from
+  `scripts/smoke-test-db.ts`) were bundle-resolved end-to-end with only
+  real npm packages externalized — 0 errors either way. This confirms
+  syntax and that import/export names line up; it does **not** confirm the
+  new smoke-test assertions actually pass, or that the types check under
+  `tsc`.
+- Manual click-through (full order → payment → cash received → change →
+  save → confirm → cart empties; try insufficient cash; try each payment
+  method; multi-product/multi-quantity sales) as requested by the Phase 3
+  brief has **not been done** — no headed browser or real device available
+  in this environment.
+- "Cash" is detected by name match, not a stored flag — see "Current
+  Architecture" above.
+- No confirmation dialog before "Clear cart" (carried from Phase 2,
+  unchanged).
+- Cart state is still in-memory only (carried from Phase 2, unchanged).
+- (Carried from Phase 1) No UI yet for editing `settings`.
+- No sales history/search/delete/dashboard yet — a saved sale can only be
+  inspected via the smoke test or IndexedDB devtools until Phase 4.
 
 ## Decisions Already Made
 
-Carried from Phases 0–1 (still true, don't change without good reason):
-IndexedDB over localStorage; `HashRouter` over `BrowserRouter`; plain CSS
-over Tailwind; self-hosted Manrope; the `SaleItem` snapshot pattern;
-soft-delete-only for products/categories/payment methods; no confirmation
-dialogs for reversible one-tap actions.
+Carried from Phases 0–2 (still true, don't change without good reason):
+IndexedDB over localStorage; `HashRouter`; plain CSS; self-hosted Manrope;
+`SaleItem` snapshot pattern; soft-delete-only; no confirmation dialogs for
+reversible one-tap actions; cart stays in memory, not IndexedDB;
+`CartPanel` shared between desktop/mobile.
 
-New in Phase 2:
+New in Phase 3:
 
-- **Inactive-category products are filtered out of the POS grid**, exactly
-  like inactive products — decided in favor of the recommendation left in
-  Phase 1's HANDOFF.md. Their stored data (including any historical sales
-  referencing them) is untouched; they simply don't show up to be
-  re-ordered.
-- **Cart state stays in memory, not IndexedDB, for this phase.** Simplest
-  option that satisfies "review order with an accurate total" without
-  adding persistence machinery for a phase that doesn't save anything yet.
-- **The Phase 1 `Modal` component is reused as-is for the mobile cart
-  sheet**, rather than building a dedicated cart-sheet component. Its
-  generic `title`/`onClose`/`children` shape fit without modification.
-- **`CartPanel` is one component used in two containers** (desktop sticky
-  column vs. mobile `Modal`), switched by CSS (`display: none` /
-  `display: block` at the 860px breakpoint) plus the `cartSheetOpen` piece
-  of state that only gates the mobile `Modal`. This avoids maintaining two
-  cart-rendering implementations that could drift apart.
-- **Category tabs are a horizontal scroller**, not the Phase 1 `.segmented`
-  control — see "Current Architecture" above for why.
-- **No confirmation dialog for "Clear cart".** The cart is an unsaved
-  draft, not committed data (unlike a saved sale, which Phase 4's delete
-  flow will require confirmation for) — consistent with Phase 1's
-  reasoning for not confirming deactivation.
-- **"Continue to Payment" is a disabled placeholder button inside
-  `CartPanel`**, not a separate unwired screen — chosen over the brief's
-  other allowed option (leaving checkout out entirely) because it makes
-  the intended Phase 3 entry point visible and unambiguous to whoever
-  builds it next.
+- **Cash detection by name match**, not a `PaymentMethod.isCash` flag —
+  simplest option that correctly handles the seeded default without a
+  schema change. Revisit (add a real flag, migrate `DB_VERSION`) only if
+  an owner actually renames "Cash" and this becomes a real problem — see
+  `CheckoutModal.tsx`'s `isCashMethod()` comment.
+- **Non-cash payment methods require no cash-received input** and are
+  saved as fully paid with no change — i.e. `amountReceived`/`change` are
+  simply `undefined` on the `Sale` for those. This matches how a real
+  coffee cart owner would use GCash/Maya/bank transfer (the exact amount
+  moves, there's no "change").
+- **The service, not the UI, computes `total` and each line's
+  `lineTotal`.** `CheckoutModal` never adds up prices itself — it always
+  reads `cart.total` for display and lets `recordSale` compute the
+  authoritative total that gets saved. Keeps "what a sale actually cost"
+  defined in exactly one place.
+- **One `<Modal>`, two screens (form → confirmation), not two modals.**
+  See "Current Architecture" above.
+- **`cart.clear()` is deferred to the confirmation screen's dismissal**,
+  not called immediately after saving — so the owner sees what they just
+  sold before the cart resets.
+- **Sale-writing logic lives in `salesService.ts`**; Phase 4 should put
+  sale-*reading* logic (list/get/delete) in the same file rather than a
+  separate `salesHistoryService.ts` or similar — one service per store,
+  matching the pattern already set for products/categories/payment
+  methods/settings.
 
 ## DO NOT CHANGE
 
-Everything listed in Phases 0–1's version of this section (HashRouter,
-`SaleItem` snapshot fields, design tokens, top-level folder structure,
-soft-delete-only pattern, store names/keyPaths, `DB_VERSION` migration
-discipline) — still applies. Additionally, as of Phase 2:
+Everything listed in Phases 0–2's version of this section still applies.
+Additionally, as of Phase 3:
 
-- The `CartLine` type's shape (`productId`, `name`, `unitPrice`,
-  `quantity`) — defined back in Phase 0, now actually used. Don't rename
-  its fields; `useCart.ts` and `CartPanel.tsx` both depend on this exact
-  shape.
-- The active-category-AND-active-product filter in `PosPage.tsx` — this is
-  now the documented, deliberate resolution of Phase 1's open question.
-  Don't quietly revert to showing all active products regardless of their
-  category's status.
-- Don't fork `CartPanel` into two separate components for desktop/mobile —
-  if Phase 3 needs different behavior in one context, prefer a prop over a
-  duplicate component.
+- The price/name snapshot rule in `salesService.recordSale` — it must
+  always take `productNameSnapshot`/`unitPriceSnapshot` from the
+  `CartLine` it's given, never from a live `productsService` lookup. This
+  is the master spec's core data-integrity rule; breaking it would let a
+  future price change silently rewrite historical sales.
+- The `Sale`/`SaleItem` field names and the fact that both the embedded
+  `Sale.items` array and the flat `saleItems` store are written for every
+  sale — Phase 4's history list and Phase 5's product-performance reports
+  are expected to read from whichever of the two is more convenient for
+  their query, and both assume both are always present and in sync.
+- Don't make `salesService.recordSale` compute `total`/`lineTotal` from
+  anything other than the `CartLine`s it's given (e.g. don't have it
+  re-fetch the product to "double check" the price) — that would
+  reintroduce exactly the bug the snapshot pattern exists to prevent.
 
 ## Next Phase
 
-**PHASE 3 — Sales Recording.** See `NEXT_PHASE_PROMPT.md` for the exact
-brief.
+**PHASE 4 — Sales History + Dashboard.** See `NEXT_PHASE_PROMPT.md` for the
+exact brief.
 
 ## Recommended First Steps
 
 1. Read `README.md`, `PROJECT_STATUS.md`, this file, and
    `NEXT_PHASE_PROMPT.md`.
 2. **Run `npm install && npm run build && npx oxlint && npm run
-   smoke-test` before writing any Phase 3 code.** This phase's code has
-   never been through any of these — treat that as step zero, not
-   optional, and fix anything they surface before proceeding.
-3. Run `npm run dev`, open the POS tab, and manually click through: switch
-   categories (including "All"), tap several products, increase/decrease/
-   remove/clear the cart every way, confirm the total is always right, and
-   check both a mobile-width and a desktop-width browser window. This is
-   real manual QA that could not be done this session.
-4. Read `src/types/index.ts`'s `Sale`/`SaleItem` types (unchanged since
-   Phase 0) and `src/hooks/useCart.ts` (new this phase) — Phase 3 needs
-   both: it saves a `Sale` + its `SaleItem`s (with price snapshots) from
-   whatever's currently in the cart hook's `lines`.
-5. Build a `src/services/salesService.ts` following the same plain-
-   async-function pattern as `productsService.ts` etc. (see Phase 1's
-   HANDOFF.md "Current Architecture").
-6. Wire the "Continue to Payment" button in `CartPanel.tsx` to an actual
-   flow (likely a new modal/screen for payment method selection + cash
-   received + change calculation), then call `salesService` to save, then
-   `cart.clear()` on success.
-7. Update `PROJECT_STATUS.md`, `HANDOFF.md`, and replace
-   `NEXT_PHASE_PROMPT.md` with Phase 4 instructions before stopping.
+   smoke-test` before writing any Phase 4 code.** Neither Phase 2 nor
+   Phase 3's code has ever been through any of these — treat this as step
+   zero, not optional, and fix anything they surface (including in the
+   Phase 3 sales round-trip smoke test, which has never actually been
+   executed) before proceeding.
+3. Run `npm run dev` and manually complete a few full sales (different
+   payment methods, different product/quantity combinations, at least one
+   with insufficient cash to confirm validation blocks it) before changing
+   anything. This is real manual QA that could not be done in Phases 2 or
+   3.
+4. Read `src/services/salesService.ts` (what a saved `Sale` looks like)
+   and `src/types/index.ts`'s `Sale`/`SaleItem` types.
+5. Build `listSales`/`getSale`/`deleteSale` in `salesService.ts` (query the
+   `sales` store, probably via the existing `by-date` index for a
+   most-recent-first list).
+6. Build the Sales History screen (`src/pages/HistoryPage.tsx`, replacing
+   its Phase 0 placeholder): list, search, transaction detail view,
+   delete (with a confirmation dialog this time — unlike the reversible
+   deactivate/clear-cart actions in earlier phases, deleting a sale is
+   destructive and irreversible, so the master spec's requirement for
+   confirmation here is different from those).
+7. Build the dashboard stats called for in the Phase 4 brief (today's
+   sales, transaction count, items sold, average sale, payment breakdown,
+   top products) — decide where they live (a new section of `HistoryPage`,
+   or a separate dashboard area) and document the choice.
+8. Update `PROJECT_STATUS.md`, `HANDOFF.md`, and replace
+   `NEXT_PHASE_PROMPT.md` with Phase 5 instructions before stopping.
 
 ## Testing Status
 
 | Check | Result |
 |---|---|
-| `npm install` | ❌ Failed — `403 Forbidden` from `registry.npmjs.org` (no network egress in this container) |
-| `npx tsc -b` (type-check) | ⛔ Not run — no `node_modules` (install failed) |
-| `npm run build` | ⛔ Not run |
-| `npx oxlint` | ⛔ Not run |
-| `npm run smoke-test` | ⛔ Not run (also: cart is UI-only state, not IndexedDB-backed, so it wasn't extended this phase — matches the Phase 2 brief's "optional, use your judgment") |
-| `esbuild` syntax check on `useCart.ts`, `CartPanel.tsx`, `PosPage.tsx` | ✅ Pass, 0 errors (using the `esbuild` binary bundled with the `tsx` devDependency already present in this environment) |
-| `esbuild --bundle` from `src/main.tsx`, externalizing only real npm packages | ✅ Pass — every relative import across the whole app resolves, 0 errors |
-| Manual click-through in a real/headed browser | ❌ Not done — no headed browser available in this environment |
+| `npm install` (retried this phase) | ❌ Failed again — `403 Forbidden` from `registry.npmjs.org`, same as Phase 2 |
+| `npx tsc -b` / `npm run build` / `npx oxlint` / `npm run smoke-test` | ⛔ Not run — no `node_modules` |
+| `esbuild` syntax check on `salesService.ts`, `CheckoutModal.tsx`, `CartPanel.tsx`, `PosPage.tsx`, `smoke-test-db.ts` | ✅ Pass, 0 errors |
+| `esbuild --bundle` from `src/main.tsx` (app) and from `scripts/smoke-test-db.ts` (smoke test), externalizing only real npm packages | ✅ Pass both — every relative import resolves, 0 errors |
+| Manual click-through of a full sale (cash + non-cash, various carts) in a real/headed browser | ❌ Not done — no headed browser available in this environment |
 | Real mobile device check | ❌ Not done |
-| Confirmed Phase 0–1 functionality (Product Management, History/Reports placeholders) untouched | ✅ Verified by inspection — only `PosPage.tsx` and `components.css` were modified; `useCart.ts`/`CartPanel.tsx` are new, isolated files |
+| Confirmed Phase 0–2 functionality untouched | ✅ Verified by inspection — only `CartPanel.tsx` and `PosPage.tsx` were modified; `salesService.ts` and `CheckoutModal.tsx` are new, isolated files |

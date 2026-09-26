@@ -2,39 +2,35 @@ Project:
 Coffee Cart POS
 
 Current Phase:
-PHASE 2 — POS + Cart
+PHASE 3 — Sales Recording
 
 Status:
 COMPLETE (pending real-browser + real-device verification — see "Known bugs")
 
 Completed:
 
-* POS product grid built in `src/pages/PosPage.tsx`, replacing the Phase 0 placeholder
-* Category tabs (horizontal scroller, not a fixed segmented control) plus an "All" tab, reading active categories via `categoriesService.listCategories(false)`
-* Products read via `productsService.listProducts(false)` (active only), then further filtered to only those whose category is also active — this was the open "Known Issue" from Phase 1's HANDOFF.md, now decided: a product whose category is deactivated disappears from the POS grid exactly like an inactive product, with its own stored data untouched
-* Large touch-friendly product tiles: name, price (via `utils/money.ts`'s `formatMoney` with the seeded currency symbol), optional photo, tapping adds to cart or increments quantity if already present
-* Cart state in a new reusable hook, `src/hooks/useCart.ts`, built on the existing `CartLine` type from `src/types/index.ts` (no new shape invented) — in-memory only, not persisted to IndexedDB this phase (deliberate; see HANDOFF.md)
-* Cart supports: increase quantity, decrease quantity (line removed at 0), remove item directly, clear cart, per-line subtotal, running total
-* New shared `src/components/CartPanel.tsx` renders the cart — reused by both the always-visible desktop cart column and the mobile bottom sheet, rather than building two implementations
-* Mobile layout: product grid fills the screen; a floating "VIEW ORDER — {total}" bar appears above the bottom tab bar once the cart has at least one item, and opens the cart in a bottom sheet built from the existing Phase 1 `Modal` component
-* Desktop layout (≥860px, matching the existing breakpoint in `layout.css`): product grid on the left, cart panel always visible in a sticky column on the right; the floating bar is hidden
-* Checkout is a visible, disabled placeholder button ("Continue to Payment") — payment selection and saving the sale are explicitly Phase 3, not implemented here
-* New CSS added to `src/styles/components.css` for the POS layout, category tabs, product grid/tiles, cart panel, quantity stepper, and the mobile floating bar — all built from the existing design tokens in `theme.css`, no new colors/fonts introduced
-* Confirmed Product Management (Phase 1) and the History/Reports placeholders (Phase 0) are untouched by this phase's changes (only `PosPage.tsx` and `components.css` were modified; `useCart.ts` and `CartPanel.tsx` are new files)
+* New `src/services/salesService.ts` (`recordSale`) — writes a `Sale` record plus one `SaleItem` per cart line in a single IndexedDB transaction, following the same plain-async-function pattern as the other services
+* Price/name snapshots (`productNameSnapshot`, `unitPriceSnapshot`) are copied directly from the cart's `CartLine` at save time, never re-read from the live `Product` — verified in the extended smoke test by changing a product's price after a sale and confirming the saved sale is unaffected
+* New `src/components/CheckoutModal.tsx` — payment method selection (reading active methods via `paymentMethodsService.listPaymentMethods(false)`), a cash-received field + live change calculation shown only for a payment method named "Cash" (case-insensitive), validation that cash received covers the total, and a confirmation screen (total + change due) after saving
+* The Phase 2 "Continue to Payment" placeholder in `CartPanel.tsx` is now a real button — wired to open `CheckoutModal` via a new `onCheckout` prop, supplied by `PosPage.tsx`
+* On successful save, the confirmation screen's "New sale" button clears the cart (`cart.clear()`) and closes the checkout modal, so the next order starts fresh
+* `scripts/smoke-test-db.ts` extended with a sales round-trip test: records a 2-line sale, confirms the sale total/change and that both the embedded `Sale.items` and the flat `saleItems` store hold the two `SaleItem`s, then updates one product's price afterward and confirms the saved `SaleItem`'s `unitPriceSnapshot` is untouched while the live product's price did change
+* Payment method selection is a horizontal button list (not a dropdown), matching the app's touch-first, minimal-typing design direction
+* Confirmed Product Management (Phase 1) and the POS product grid/cart (Phase 2) still work exactly as before — only `CartPanel.tsx` and `PosPage.tsx` were modified this phase; `salesService.ts` and `CheckoutModal.tsx` are new, isolated files
 
 Current functionality:
 
-* Owner can open the POS tab, switch categories, tap products to build an order, adjust quantities every way (increase/decrease/remove/clear), and see an always-correct running total
-* Cart state resets if the page is reloaded (in-memory only) — acceptable for this phase, flagged for revisit if it becomes a real problem
-* Tapping "Continue to Payment" does nothing yet (disabled) — Phase 3 wires this up
+* Owner can build an order (Phase 2), tap "Continue to Payment", pick a payment method, enter cash received if paying cash, see the change due, save the sale, see a confirmation with the total and change, and start a fresh empty cart
+* A saved sale is only verifiable by reading IndexedDB directly (e.g. via the smoke test, or the browser's IndexedDB devtools panel) — there is no Sales History screen yet to see it in the UI; that's Phase 4
 
 Known bugs / verification gaps:
 
-* **This phase's code could not be run, built, or lint-checked in this session** — `npm install` failed with a 403 (no network egress available to this container; see HANDOFF.md "Testing Status" for the exact commands and errors). No `npm run dev`, `npm run build`, `npx oxlint`, or `npm run smoke-test` could be executed.
-* In place of the above, every new/changed file was checked with `esbuild` (bundled with a separately-installed devDependency of another package, `tsx`, already present in this environment) for syntax validity, and the full app entry point (`src/main.tsx`) was bundle-resolved end-to-end with only true npm packages (`react`, `react-dom`, `react-router-dom`, `idb`, `@fontsource/*`) externalized — this confirms every relative import resolves and the JSX/TS syntax is valid, but it is **not** a substitute for `tsc`'s type-checking, `oxlint`, or a real browser.
-* **A human must run `npm install && npm run dev` (or `npm run build`), click through the POS screen at both a mobile and a desktop width, and run `npm run smoke-test`/`npx oxlint`/`npx tsc -b` before this phase is truly done.** Treat this phase as code-complete-but-unverified until that happens.
-* No confirmation dialog before "Clear cart" — deliberate, matching the lightweight one-tap pattern from Phase 1's deactivate toggles (the cart is an unsaved draft, not committed data). Documented in HANDOFF.md.
+* **This phase's code could not be run, built, or lint-checked in this session either** — same network restriction as Phase 2 (`npm install` still returns a 403; re-tried at the start of this phase, no change). No `npm run dev`, `npm run build`, `npx oxlint`, or `npm run smoke-test` could be executed.
+* In place of the above: every new/changed file was syntax-checked with `esbuild`, and the full app (`src/main.tsx`) plus the smoke test script (`scripts/smoke-test-db.ts`) were both bundle-resolved end-to-end (only real npm packages externalized) with 0 errors. This confirms syntax and that every import/export name lines up — it does **not** confirm the extended smoke test's assertions actually pass, since it was never executed against `fake-indexeddb`.
+* **A human must run `npm install && npm run build && npx oxlint && npm run smoke-test`, then click through a full order → payment → save → confirm flow (cash and non-cash) on both a mobile and a desktop width, before this phase is truly done.**
+* "Cash" detection is by matching the payment method's name, case-insensitively, to "cash" — if the owner renames the seeded "Cash" payment method, the cash-received/change fields will stop appearing for it. Documented as a deliberate simplification in HANDOFF.md; a dedicated flag on `PaymentMethod` would be the more robust fix if this matters in practice.
+* No sales history/search/delete yet (Phase 4) — a saved sale has no UI to view it in.
 
 Next phase:
 
-PHASE 3 — Sales Recording
+PHASE 4 — Sales History + Dashboard

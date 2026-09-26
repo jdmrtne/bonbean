@@ -1,12 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
 import { CartPanel } from "../components/CartPanel";
+import { CheckoutModal } from "../components/CheckoutModal";
 import { EmptyState } from "../components/EmptyState";
 import { Modal } from "../components/Modal";
 import { listCategories } from "../services/categoriesService";
+import { listPaymentMethods } from "../services/paymentMethodsService";
 import { listProducts } from "../services/productsService";
 import { getSettings } from "../services/settingsService";
 import { useCart } from "../hooks/useCart";
-import type { Category, Product } from "../types";
+import type { Category, PaymentMethod, Product } from "../types";
 import { formatMoney } from "../utils/money";
 
 const ALL_CATEGORIES = "all";
@@ -14,9 +16,11 @@ const ALL_CATEGORIES = "all";
 export function PosPage() {
   const [categories, setCategories] = useState<Category[] | null>(null);
   const [products, setProducts] = useState<Product[] | null>(null);
+  const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
   const [currency, setCurrency] = useState("₱");
   const [selectedCategory, setSelectedCategory] = useState<string>(ALL_CATEGORIES);
   const [cartSheetOpen, setCartSheetOpen] = useState(false);
+  const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const cart = useCart();
@@ -25,14 +29,16 @@ export function PosPage() {
     let cancelled = false;
     async function load() {
       try {
-        const [categoryList, productList, settings] = await Promise.all([
+        const [categoryList, productList, methodList, settings] = await Promise.all([
           listCategories(false),
           listProducts(false),
+          listPaymentMethods(false),
           getSettings(),
         ]);
         if (cancelled) return;
         setCategories(categoryList);
         setProducts(productList);
+        setPaymentMethods(methodList);
         setCurrency(settings.currency);
       } catch (err) {
         if (!cancelled) {
@@ -63,6 +69,14 @@ export function PosPage() {
     if (selectedCategory === ALL_CATEGORIES) return visibleProducts;
     return visibleProducts.filter((p) => p.categoryId === selectedCategory);
   }, [visibleProducts, selectedCategory]);
+
+  // Opening checkout always closes the mobile cart sheet first, so the two
+  // modals never stack. On desktop the cart sheet is never open anyway
+  // (there's no trigger for it above 860px), so this is a no-op there.
+  function openCheckout() {
+    setCartSheetOpen(false);
+    setCheckoutOpen(true);
+  }
 
   if (error) {
     return (
@@ -151,7 +165,7 @@ export function PosPage() {
             Hidden on mobile via CSS — see styles/components.css. */}
         <div className="pos-cart-panel">
           <div className="pos-cart-panel__header">Your Order</div>
-          <CartPanel cart={cart} currency={currency} />
+          <CartPanel cart={cart} currency={currency} onCheckout={openCheckout} />
         </div>
       </div>
 
@@ -170,8 +184,18 @@ export function PosPage() {
 
       {cartSheetOpen && (
         <Modal title="Your Order" onClose={() => setCartSheetOpen(false)}>
-          <CartPanel cart={cart} currency={currency} />
+          <CartPanel cart={cart} currency={currency} onCheckout={openCheckout} />
         </Modal>
+      )}
+
+      {checkoutOpen && (
+        <CheckoutModal
+          cart={cart}
+          currency={currency}
+          paymentMethods={paymentMethods}
+          onClose={() => setCheckoutOpen(false)}
+          onDone={() => setCheckoutOpen(false)}
+        />
       )}
     </>
   );

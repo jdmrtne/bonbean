@@ -6,13 +6,14 @@ import { formatMoney } from "../utils/money";
 interface CartPanelProps {
   cart: UseCartResult;
   currency: string;
+  onCheckout: () => void;
 }
 
 // Shared between the always-visible desktop cart column and the mobile
 // bottom-sheet (opened from the floating "VIEW ORDER" bar) — see
 // PosPage.tsx and HANDOFF.md "Decisions Already Made" for why the same
 // component is reused in both places instead of two implementations.
-export function CartPanel({ cart, currency }: CartPanelProps) {
+export function CartPanel({ cart, currency, onCheckout }: CartPanelProps) {
   const { lines, total, increase, decrease, removeLine, clear } = cart;
 
   if (lines.length === 0) {
@@ -86,9 +87,7 @@ export function CartPanel({ cart, currency }: CartPanelProps) {
         <Button variant="secondary" onClick={clear}>
           Clear cart
         </Button>
-        {/* Payment selection + saving the sale belong to Phase 3 — this is a
-            visible placeholder only, per the Phase 2 brief. */}
-        <Button variant="primary" size="lg" block disabled title="Coming in Phase 3">
+        <Button variant="primary" size="lg" block onClick={onCheckout}>
           Continue to Payment
         </Button>
       </div>

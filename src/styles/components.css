@@ -607,6 +607,76 @@
   }
 }
 
+/* Checkout (Phase 3): payment selection + confirmation, inside the shared Modal */
+.checkout-total {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font: var(--text-heading);
+  padding-bottom: var(--space-4);
+  margin-bottom: var(--space-4);
+  border-bottom: 1px solid var(--color-line);
+}
+
+.checkout-total__amount {
+  font: var(--text-price-lg);
+  color: var(--color-accent-strong);
+}
+
+.payment-method-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.payment-method-btn {
+  flex: 1 1 auto;
+  min-width: 96px;
+  min-height: var(--tap-target-min);
+  padding: 0 var(--space-4);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-line-strong);
+  background: var(--color-surface);
+  color: var(--color-ink);
+  font: var(--text-heading);
+  cursor: pointer;
+}
+
+.payment-method-btn.is-active {
+  background: var(--color-accent-wash);
+  border-color: var(--color-accent);
+  color: var(--color-accent-ink);
+}
+
+.checkout-confirm {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: var(--space-2);
+  padding: var(--space-4) 0;
+}
+
+.checkout-confirm__icon {
+  font-size: 2.5rem;
+}
+
+.checkout-confirm__total {
+  font: var(--text-price-lg);
+  color: var(--color-accent-strong);
+}
+
+.checkout-confirm__change {
+  font: var(--text-heading);
+  color: var(--color-ink-soft);
+  margin-bottom: var(--space-2);
+}
+
+.checkout-confirm .btn {
+  margin-top: var(--space-3);
+  width: 100%;
+}
+
 /* Page header used inside pages */
 .page-header {
   margin-bottom: var(--space-4);
