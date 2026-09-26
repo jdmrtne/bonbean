@@ -7,11 +7,13 @@
 // a custom one) and reporting on it. Both pages share their aggregation
 // logic via utils/reportStats.ts (see that file's header comment).
 import { useEffect, useMemo, useState } from "react";
+import { Button } from "../components/Button";
 import { Card } from "../components/Card";
 import { EmptyState } from "../components/EmptyState";
 import { listSales } from "../services/salesService";
 import { getSettings } from "../services/settingsService";
 import type { Sale } from "../types";
+import { downloadTextFile } from "../utils/download";
 import { formatDateKey } from "../utils/date";
 import { formatMoney } from "../utils/money";
 import {
@@ -23,6 +25,7 @@ import {
   topProductsByRevenue,
   type DateRangePreset,
 } from "../utils/reportStats";
+import { buildExportFilename, buildTransactionLineRows, transactionRowsToCsv } from "../utils/salesExport";
 
 const TOP_PRODUCTS_LIMIT = 5;
 
@@ -53,6 +56,7 @@ function formatDateLabel(key: string): string {
 export function ReportsPage() {
   const [sales, setSales] = useState<Sale[] | null>(null);
   const [currency, setCurrency] = useState("₱");
+  const [businessName, setBusinessName] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   const [preset, setPreset] = useState<DateRangePreset>("today");
@@ -72,6 +76,7 @@ export function ReportsPage() {
         const [saleList, settings] = await Promise.all([listSales(), getSettings()]);
         setSales(saleList);
         setCurrency(settings.currency);
+        setBusinessName(settings.businessName);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Could not load sales for reports");
       }
@@ -107,6 +112,29 @@ export function ReportsPage() {
       ? formatDateLabel(range.start)
       : `${formatDateLabel(range.start)} – ${formatDateLabel(range.end)}`;
 
+  // PHASE 6 — CSV export: one row per line item across the selected
+  // range (see utils/salesExport.ts for why one-row-per-item rather than
+  // one-row-per-sale). Built from the same rangeSales the on-screen stats
+  // already use, so the export can never disagree with what's on screen.
+  function handleDownloadCsv() {
+    const rows = buildTransactionLineRows(rangeSales);
+    const csv = transactionRowsToCsv(rows);
+    downloadTextFile(buildExportFilename(range, "csv"), csv, "text/csv;charset=utf-8;");
+  }
+
+  // PHASE 6 — PDF export: no PDF-generation library was added (see
+  // HANDOFF.md's Phase 6 section for why — this environment could not
+  // verify a new dependency via a real npm install this session, and a
+  // browser-print stylesheet needs zero dependencies and works fully
+  // offline). Printing the *same* on-screen report — via the print-only
+  // header below plus components.css's `@media print` rules, which hide
+  // navigation/controls and show that header — means the PDF can never
+  // drift from what the owner already sees. "Save as PDF" is a standard
+  // destination in every modern browser's print dialog.
+  function handlePrint() {
+    window.print();
+  }
+
   if (error) {
     return (
       <div className="banner banner--danger" role="alert">
@@ -119,12 +147,22 @@ export function ReportsPage() {
 
   return (
     <>
-      <div className="page-header">
+      <div className="page-header no-print">
         <h1 className="page-header__title">Reports</h1>
         <p className="page-header__subtitle">Sales totals by day, week, or a custom range.</p>
       </div>
 
-      <div className="range-tabs" role="tablist" aria-label="Date range">
+      {/* Print/PDF-only: components.css's @media print rules hide the app
+          nav and the controls above/below (marked .no-print) and show
+          this instead, so a printed/"Saved as PDF" report reads as a
+          standalone document rather than a screenshot of the app UI. */}
+      <div className="print-only print-report-header">
+        <div className="print-report-header__business">{businessName || "Coffee Cart"}</div>
+        <div className="print-report-header__title">Sales report — {rangeLabel}</div>
+        <div className="print-report-header__meta">Generated {new Date().toLocaleString()}</div>
+      </div>
+
+      <div className="range-tabs no-print" role="tablist" aria-label="Date range">
         {PRESETS.map((p) => (
           <button
             key={p.id}
@@ -140,7 +178,7 @@ export function ReportsPage() {
       </div>
 
       {preset === "custom" && (
-        <div className="custom-range-row">
+        <div className="custom-range-row no-print">
           <div className="field">
             <label className="field__label" htmlFor="report-range-start">
               From
@@ -171,7 +209,7 @@ export function ReportsPage() {
         </div>
       )}
 
-      <p className="report-range-label">{rangeLabel}</p>
+      <p className="report-range-label no-print">{rangeLabel}</p>
 
       {rangeSales.length === 0 ? (
         <EmptyState
@@ -219,8 +257,12 @@ export function ReportsPage() {
               <div className="dashboard__section-header">
                 <div className="dashboard__section-title" style={{ marginBottom: 0 }}>
                   Product performance
+                  <span className="print-only-inline">
+                    {" "}
+                    (by {productSort === "quantity" ? "quantity" : "revenue"})
+                  </span>
                 </div>
-                <div className="segmented" role="tablist" aria-label="Rank products by">
+                <div className="segmented no-print" role="tablist" aria-label="Rank products by">
                   <button
                     type="button"
                     role="tab"
@@ -258,6 +300,22 @@ export function ReportsPage() {
               </div>
             </Card>
           )}
+
+          <Card className="no-print">
+            <div className="dashboard__section-title">Export</div>
+            <p className="export-card__hint">
+              CSV has one row per item sold — for a bookkeeper or spreadsheet. The PDF/print export
+              is the report summary above, formatted to hand to someone else.
+            </p>
+            <div className="export-actions">
+              <Button variant="secondary" onClick={handleDownloadCsv}>
+                Download CSV
+              </Button>
+              <Button variant="secondary" onClick={handlePrint}>
+                Print / Save as PDF
+              </Button>
+            </div>
+          </Card>
         </div>
       )}
     </>

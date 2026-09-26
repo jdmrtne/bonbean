@@ -9,51 +9,65 @@ First:
 1. Read README.md
 2. Read PROJECT_STATUS.md
 3. Read HANDOFF.md IN FULL — especially "Testing Status" AND the note at
-   the top of "Current Phase". Phase 5's session had NO npm registry
-   access at all, so `npm install`, `tsc -b`, `build`, `oxlint`, and the
-   real `smoke-test` suite were never run against the actual project
-   dependencies. Only `utils/reportStats.ts`'s pure logic was actually
-   executed (via a standalone script with the globally-available `tsx`,
-   which needs no `node_modules`). Treat ALL of Phase 5's TypeScript —
-   `ReportsPage.tsx`, the `HistoryPage.tsx` refactor, and the
-   `salesService.ts` re-export change — as genuinely unverified by the
-   project's toolchain until you've run it yourself in step 6. This is a
-   stronger caveat than Phase 4 carried forward from Phases 2–3.
+   the top of "Current Phase". Phases 5 AND 6's sessions both had NO npm
+   registry access, so `npm install`, `tsc -b`, `build`, `oxlint`, and the
+   real `smoke-test` suite have not been run against the actual project
+   dependencies since Phase 4. Only each phase's dependency-free pure
+   logic was actually executed (via a standalone script with the
+   globally-available `tsx`, which needs no `node_modules`). Treat ALL of
+   Phase 5's AND Phase 6's TypeScript as genuinely unverified by the
+   project's toolchain until you've run it yourself in step 6. This now
+   spans two full phases of unverified `ReportsPage.tsx` changes in
+   particular.
 4. Read this file (NEXT_PHASE_PROMPT.md)
 5. Inspect the existing source code, especially:
-   - `src/utils/reportStats.ts` — dependency-free date-range +
-     aggregation logic (`resolveDateRange`, `filterSalesByRange`,
-     `computeSalesStats`, `computeProductPerformance`,
-     `topProductsByQuantity`, `topProductsByRevenue`). Export very likely
-     wants to reuse these rather than recomputing anything — read the
-     file's header comment for why it's built the way it is.
-   - `src/pages/ReportsPage.tsx` — the range-selection UI and how it
-     wires into `reportStats.ts`. A "export the current report" action
-     will likely live here or very near here.
-   - `src/services/salesService.ts` — `listSales`, still the only way
-     sales are read; also note `formatDateKey` now lives in
-     `src/utils/date.ts` and is just re-exported here.
+   - `src/utils/salesExport.ts` and `src/utils/csv.ts` — dependency-free
+     CSV row-shaping/escaping added in Phase 6. Backup/restore probably
+     wants its own serialization format (likely JSON, covering
+     products/categories/payment methods/settings/sales — not just
+     sales), but consider whether the same "plain params in, no
+     IndexedDB import" discipline these modules (and `reportStats.ts`)
+     use is worth following for a backup-building/parsing module too, so
+     it stays unit-testable without `node_modules`.
+   - `src/services/*.ts` — Restore will need to write to every store
+     (`products`, `categories`, `paymentMethods`, `sales`, `saleItems`,
+     `settings`), not just read from one. Look at `src/database/db.ts`
+     for the schema/store names and at `salesService.ts`'s
+     multi-store-transaction pattern (`recordSale`/`deleteSale`) for how
+     this project keeps related stores in sync within one `idb`
+     transaction.
+   - `src/utils/download.ts` — the Phase 6 CSV download helper
+     (Blob + object-URL). A JSON backup file download will likely reuse
+     this exact pattern (or a near-identical one) rather than
+     reintroducing it.
+   - `src/pages/ReportsPage.tsx`'s "Export" `Card` (Phase 6) — for UI
+     precedent on where a "Backup" (and "Restore") control might live;
+     Backup/Restore probably doesn't belong on the Reports screen itself
+     (it's not scoped to a date range like everything else there), so
+     think about whether it wants its own settings/admin area — check
+     whether one already exists or would need to be added to
+     `AppShell.tsx`'s nav.
 6. Run `npm install && npx tsc -b && npm run build && npx oxlint && npm
    run smoke-test`. **This is more important than usual**: if this
-   container has working npm registry access (unlike Phase 5's), this is
-   the FIRST time Phase 5's code will actually be type-checked, linted,
-   and smoke-tested. Fix anything that comes up — don't assume Phase 5's
-   code is clean just because its own handoff says it was carefully
-   reviewed; carefully-reviewed unverified code is still unverified. If
-   your container ALSO lacks npm registry access, say so plainly (as
-   Phase 5's handoff did) rather than silently skipping these steps —
-   don't let this become a third or fourth consecutive phase where the
-   real toolchain never actually runs. Then run `npm run dev` and
-   manually click through: a few full sales on the POS screen, Sales
-   History (list/detail/search/delete/notes), and every Reports control —
-   all 6 date-range presets, both custom date inputs (including entering
-   a reversed range to confirm the swap-on-reversed behavior), and the
-   revenue/quantity toggle — at both a mobile and a desktop width. This
-   manual pass has not been done for ANY phase since Phase 1.
+   container has working npm registry access (unlike Phases 5 and 6), this
+   is the FIRST time in two phases that any of this code will actually be
+   type-checked, linted, and smoke-tested. Fix anything that comes up —
+   don't assume Phase 5's or Phase 6's code is clean just because each
+   was carefully reviewed; carefully-reviewed unverified code is still
+   unverified, twice over now. If your container ALSO lacks npm registry
+   access, say so plainly (as Phases 5 and 6 both did) rather than
+   silently skipping these steps — don't let this become a fourth or
+   fifth consecutive phase where the real toolchain never actually runs.
+   Then run `npm run dev` and manually click through: a few full sales on
+   the POS screen, Sales History, every Reports control including the new
+   Phase 6 Export buttons (actually open the downloaded CSV in a
+   spreadsheet app and look at the print/PDF output), before building
+   Backup/Restore on top of it. This manual pass has not been done for
+   ANY phase since Phase 1.
 
 Current phase:
 
-PHASE 6
+PHASE 7
 
 Previous phases completed:
 
@@ -63,74 +77,104 @@ PHASE 2 — POS + Cart
 PHASE 3 — Sales Recording
 PHASE 4 — Sales History + Dashboard
 PHASE 5 — Reports
+PHASE 6 — Excel + PDF Export
 
 Your task is to implement:
 
-## PHASE 6 — EXCEL + PDF EXPORT
+## PHASE 7 — BACKUP + RESTORE
 
-Add the ability to export sales data from the app, for an owner who wants
-records outside the app (for their own bookkeeping, an accountant, etc.).
+This is a client-side, offline-first app with all data in IndexedDB and
+nowhere else (see README's tech stack) — there is currently no way for an
+owner to move their data to a new device, recover from a cleared browser/
+uninstalled PWA, or keep an off-device safety copy. Phase 7 adds that.
 
-### What to export
+### What to back up
 
-- From `ReportsPage.tsx`: an export of the currently-selected date range —
-  at minimum, the same numbers the report already shows (totals,
-  transaction count, items sold, average sale, payment breakdown, product
-  performance), and probably the underlying transaction list too. Decide
-  the level of detail and document your choice; reuse
-  `utils/reportStats.ts`'s functions rather than recomputing anything.
-- From `HistoryPage.tsx`, or as part of the same export flow: consider
-  whether a full sales-history export (all-time, not just the selected
-  report range) is worth offering here too, or whether it's cleanly
-  covered by Reports' "custom" range already being able to span all of a
-  cart's history. Document whichever you decide.
+- Every IndexedDB store: `products`, `categories`, `paymentMethods`,
+  `sales`, `saleItems`, `settings`. Decide the file's shape (a single JSON
+  object with one key per store is the obvious default) and document it.
+- Consider a format version field in the backup file from the start (e.g.
+  `{ formatVersion: 1, exportedAt: ..., products: [...], ... }`) so a
+  future phase can evolve the format without guessing at old, unversioned
+  files.
 
-### Format(s)
+### Backup (export)
 
-- Build at least a CSV or Excel (.xlsx) export of the transaction list
-  (one row per sale, or one row per line item — decide and document which
-  is more useful for an owner's bookkeeping, and whether to offer both).
-- Build a PDF export of the report summary (the stat-card numbers,
-  payment breakdown, product performance) — something presentable enough
-  to hand to someone else, not just a data dump.
-- This is a client-side, offline-first app (see README's tech stack and
-  HANDOFF.md's "Decisions Already Made") — pick libraries/approaches that
-  work fully offline once installed, consistent with the rest of the app.
-  Check what's already a dependency (`package.json`) before adding a new
-  one, and document why any new dependency is needed.
+- A "Back up" action that reads every store and downloads a single JSON
+  file (reuse/extend `utils/download.ts`'s pattern from Phase 6 rather
+  than reintroducing a Blob/object-URL download from scratch).
+- Should work fully offline, like everything else in this app.
 
-### Where the export lives in the UI
+### Restore (import)
 
-- Decide whether this is a button on `ReportsPage.tsx`, a new small menu,
-  or something else. Keep it consistent with the app's existing
-  touch-friendly, mobile-first design direction (see README's "Design
-  direction" and the existing `Button`/`Modal` components) rather than
-  introducing a new interaction pattern for just this one feature.
+- A "Restore" action that accepts a previously-exported JSON file (a file
+  picker; there's no existing file-input pattern in this codebase yet —
+  establish one consistent with the app's touch-friendly design) and
+  writes its contents back into IndexedDB.
+- **This is destructive and needs real thought**, more than any prior
+  phase's data-writing logic:
+  - Decide: does Restore wipe existing data first, or merge/upsert? Full
+    replace is simpler and probably matches an owner's mental model
+    ("restore my backup") but destroys anything recorded since the
+    backup was made. Merge avoids data loss but raises id-collision and
+    duplicate-sale questions. Pick one, document why, and make sure the
+    UI is honest with the owner about which one it does before they
+    confirm.
+  - Restore MUST be behind an explicit confirmation
+    (`window.confirm`-style, matching this project's existing delete-
+    confirmation convention — see `salesService.ts`'s `deleteSale`
+    call-sites) that clearly states data will be overwritten/replaced,
+    not a silent one-tap action like most of this app's other actions.
+  - Validate the uploaded file before writing anything — check the
+    format-version field and that expected keys/shapes are present.
+    Reject (with a clear error message, not a crash) a file that doesn't
+    look like a real backup, rather than partially importing garbage
+    into IndexedDB.
+  - Writes across multiple stores should happen inside a single `idb`
+    transaction where the schema allows it (same principle as
+    `recordSale`/`deleteSale`'s multi-store transactions), so a failed
+    restore can't leave the database in a half-restored state.
 
 ### Data integrity
 
-- Exports must reflect the price/name **snapshots** stored on each `Sale`/
-  `SaleItem` (see the price-snapshot rule throughout HANDOFF.md's "DO NOT
-  CHANGE" sections) — never re-look-up current product prices/names for
-  historical sales. This should fall out naturally from using
-  `listSales()`/`reportStats.ts`, but call it out explicitly in your own
-  code comments given how central this rule is to the rest of the app.
+- A restored `Sale`'s `SaleItem` price/name snapshots must be written
+  back exactly as they were in the backup — never recomputed from
+  whatever the (possibly different, post-restore) `products` data says.
+  This is the same price-snapshot rule that's applied throughout every
+  prior phase; call it out explicitly in your own code comments given how
+  central it is.
+
+### Where this lives in the UI
+
+- Decide where a "Backup + Restore" control belongs. There's currently no
+  settings/admin screen (`src/pages/` only has POS/History/Reports/
+  Products) — consider whether Phase 7 should add a minimal one, or
+  whether Backup/Restore fits on the existing Products screen (which
+  already does other non-sales administrative things) instead of adding
+  a whole new route. Whatever you decide, keep it consistent with the
+  app's existing `Button`/`Modal`/`Card` components rather than
+  introducing a new interaction pattern.
 
 Do not break existing functionality: Product Management (Phase 1), the POS
 grid/cart (Phase 2), sales recording (Phase 3), Sales History + dashboard
-(Phase 4), and Reports (Phase 5) must keep working exactly as they do now.
+(Phase 4), Reports (Phase 5), and Export (Phase 6) must keep working
+exactly as they do now.
 
 After completing the phase:
 
-- Add smoke-test coverage for any new pure logic you extract (e.g. a
-  row-shaping/formatting helper for the exported data), following the
-  existing pattern in `scripts/smoke-test-db.ts`. A full file-generation/
-  download flow can't be smoke-tested this way — focus on the data-shaping
-  logic, same as prior phases did.
-- Do the manual click-through described in step 6 above — for Export
-  specifically (actually open the generated CSV/Excel/PDF files and check
-  their contents against what the app shows), and for Phases 2–5 if that
-  still hasn't happened by the time you pick this up.
+- Add smoke-test coverage for any new pure logic you extract (e.g. backup-
+  file validation/shape-checking), following the existing pattern in
+  `scripts/smoke-test-db.ts`. The actual restore-into-IndexedDB flow CAN
+  be smoke-tested against `fake-indexeddb` (unlike Phase 6's file-download
+  step) if your session has npm access — follow section "4" and "5"'s
+  pattern (real `getDB()`/service calls) for that part, and keep any pure
+  validation logic in its own dependency-free module the same way as
+  `reportStats.ts`/`salesExport.ts`, so it's testable even in a session
+  without npm access.
+- Do the manual click-through described in step 6 above — for Backup/
+  Restore specifically (actually export a backup, then restore it, on a
+  real/headed browser, and confirm the data matches) — and for Phases
+  2–6 if that still hasn't happened by the time you pick this up.
 - Run `npx tsc -b`, `npm run build`, `npx oxlint`, and `npm run
   smoke-test`, and fix anything they flag. If your container can't reach
   the npm registry either, say so plainly in your own handoff.
@@ -138,7 +182,7 @@ After completing the phase:
 - Update `HANDOFF.md` (What Has Been Built, Important Files, Completed
   Features, Decisions Already Made, Known Issues, Testing Status).
 - Replace this file (`NEXT_PHASE_PROMPT.md`) with instructions for
-  PHASE 7 — Backup + Restore.
+  PHASE 8 — Offline + PWA.
 
-Do NOT start Phase 7. Stop once Phase 6 is tested and documented, and tell
-the project owner Phase 6 is ready for handoff.
+Do NOT start Phase 8. Stop once Phase 7 is tested and documented, and tell
+the project owner Phase 7 is ready for handoff.

@@ -881,3 +881,96 @@ button.list-row:hover {
   flex: 0 0 auto;
   min-width: 180px;
 }
+
+/* PHASE 6 — Export (Reports). */
+.export-card__hint {
+  color: var(--color-ink-soft);
+  margin-bottom: var(--space-3);
+}
+
+.export-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+.export-actions .btn {
+  flex: 1 1 200px;
+}
+
+/* Hidden on screen; only ever shown by the @media print block below. This
+   is the PDF/print export's standalone document header — see
+   ReportsPage.tsx for what fills it in. */
+.print-only {
+  display: none;
+}
+
+.print-only-inline {
+  display: none;
+}
+
+.print-report-header {
+  margin-bottom: var(--space-4);
+}
+
+.print-report-header__business {
+  font: var(--text-title);
+}
+
+.print-report-header__title {
+  font: var(--text-heading);
+  color: var(--color-ink-soft);
+  margin-top: var(--space-1);
+}
+
+.print-report-header__meta {
+  font: var(--text-small);
+  color: var(--color-ink-faint);
+  margin-top: var(--space-1);
+}
+
+/* PHASE 6 — printing/"Save as PDF" a report. Reuses the exact on-screen
+   report DOM (see ReportsPage.tsx's handlePrint) rather than a separate
+   print-only render, so the PDF can never disagree with what's on
+   screen: hide the app chrome and any interactive controls (.no-print),
+   reveal the print-only header, and let the stat cards/breakdown/product
+   list print as plain content. */
+@media print {
+  .app-sidebar,
+  .app-topbar,
+  .app-tabbar,
+  .no-print {
+    display: none !important;
+  }
+
+  .app-main {
+    margin-left: 0 !important;
+    padding: 0 !important;
+    width: 100% !important;
+  }
+
+  .app-main__inner {
+    max-width: none !important;
+    padding: 0 !important;
+  }
+
+  .print-only {
+    display: block;
+  }
+
+  .print-only-inline {
+    display: inline;
+    font: var(--text-small);
+    color: var(--color-ink-soft);
+  }
+
+  .card {
+    box-shadow: none !important;
+    border: 1px solid var(--color-line);
+    break-inside: avoid;
+  }
+
+  body {
+    background: #fff;
+  }
+}

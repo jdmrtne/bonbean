@@ -232,6 +232,94 @@ async function main() {
   assert(byQty[0].name === "Croissant", "topProductsByQuantity ranks Croissant (5) above Iced Latte (3)");
   assert(byRev[0].name === "Iced Latte", "topProductsByRevenue ranks Iced Latte (300) above Croissant (250)");
 
+  // 8. CSV export (PHASE 6)
+  //
+  // Like section 7, this never touches IndexedDB — utils/salesExport.ts
+  // (and the utils/csv.ts it builds on) are dependency-free, taking
+  // Sale[] as a plain parameter. Covers CSV escaping edge cases and the
+  // one-row-per-line-item shaping decision documented in
+  // utils/salesExport.ts's header comment. The actual file-download step
+  // (utils/download.ts) is browser-only DOM/Blob API and isn't covered
+  // here, same as every other browser-only helper in this project — see
+  // HANDOFF.md's Testing Status for what a manual click-through still
+  // needs to confirm (opening the downloaded CSV and checking its
+  // contents against the app).
+  const { escapeCsvField, rowsToCsv, buildTransactionLineRows, transactionRowsToCsv, buildExportFilename } =
+    await import("../src/utils/salesExport");
+
+  assert(escapeCsvField("plain") === "plain", "escapeCsvField leaves a plain field untouched");
+  assert(escapeCsvField("a,b") === '"a,b"', "escapeCsvField quotes a field containing a comma");
+  assert(escapeCsvField('say "hi"') === '"say ""hi"""', "escapeCsvField doubles internal quotes");
+  assert(escapeCsvField("line1\nline2") === '"line1\nline2"', "escapeCsvField quotes a field containing a newline");
+
+  const csvSample = rowsToCsv(["A", "B"], [["1", "2"], ["x,y", 3]]);
+  assert(
+    csvSample === 'A,B\r\n1,2\r\n"x,y",3',
+    "rowsToCsv joins header + rows with CRLF line endings and escapes fields as needed",
+  );
+
+  // A multi-item sale with a comma in its notes, to exercise row-shaping
+  // and CSV escaping together against one realistic fixture.
+  const multiItemSale = {
+    ...secondSale,
+    id: "export-fixture-1",
+    date: "2026-03-18",
+    total: 235,
+    paymentMethod: "Cash",
+    notes: "regular, no sugar",
+    items: [
+      {
+        ...secondSale.items[0],
+        productNameSnapshot: "Iced Latte",
+        quantity: 1,
+        unitPriceSnapshot: 150,
+        lineTotal: 150,
+      },
+      {
+        ...secondSale.items[0],
+        id: "export-item-2",
+        productNameSnapshot: "Croissant",
+        quantity: 1,
+        unitPriceSnapshot: 85,
+        lineTotal: 85,
+      },
+    ],
+  };
+
+  const exportRows = buildTransactionLineRows([multiItemSale]);
+  assert(exportRows.length === 2, "buildTransactionLineRows produces one row per line item, not one per sale");
+  assert(
+    exportRows[0].saleTotal === 235 && exportRows[1].saleTotal === 235,
+    "every row from the same sale repeats that sale's saleTotal",
+  );
+  assert(
+    exportRows[0].saleId === exportRows[1].saleId,
+    "rows from the same sale share a saleId, so the original transaction is regroupable",
+  );
+
+  const exportCsv = transactionRowsToCsv(exportRows);
+  const csvLines = exportCsv.split("\r\n");
+  assert(csvLines.length === 3, "transactionRowsToCsv emits one header line plus one line per row");
+  assert(
+    csvLines[0] === "Date,Time,Sale ID,Payment method,Product,Unit price,Quantity,Line total,Sale total,Notes",
+    "transactionRowsToCsv header matches the documented column order",
+  );
+  assert(csvLines[1].includes('"regular, no sugar"'), "a note containing a comma is quoted in the CSV output");
+  assert(
+    csvLines[1].includes("150.00") && csvLines[2].includes("85.00"),
+    "unit/line amounts are formatted with 2 decimals and no currency symbol",
+  );
+
+  assert(
+    buildExportFilename({ start: "2026-03-18", end: "2026-03-18" }, "csv") === "sales-report_2026-03-18.csv",
+    "buildExportFilename collapses a single-day range to one date",
+  );
+  assert(
+    buildExportFilename({ start: "2026-03-01", end: "2026-03-18" }, "csv") ===
+      "sales-report_2026-03-01_to_2026-03-18.csv",
+    "buildExportFilename spells out a multi-day range",
+  );
+
   console.log("\nAll smoke tests passed.");
 }
 
