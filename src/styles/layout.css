@@ -53,6 +53,19 @@
   display: none;
 }
 
+/* Slot a routed page can portal page-specific actions into (currently
+   just PosPage's Close Register button — see HeaderActionsContext.tsx).
+   .app-topbar's own justify-content: space-between already pins this to
+   the right corner; empty and collapses to nothing when no page has
+   anything to put here. */
+.app-topbar__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex: 0 0 auto;
+  margin-left: var(--space-3);
+}
+
 .app-topbar__mark {
   width: 34px;
   height: 34px;

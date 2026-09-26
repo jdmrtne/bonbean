@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { Button } from "../components/Button";
 import { CartPanel } from "../components/CartPanel";
 import { CheckoutModal } from "../components/CheckoutModal";
@@ -8,6 +9,7 @@ import { LoadingState } from "../components/LoadingState";
 import { Modal } from "../components/Modal";
 import { OpenRegisterGate } from "../components/OpenRegisterGate";
 import { CoffeeIcon } from "../components/Icon";
+import { useHeaderActionsNode } from "../context/HeaderActionsContext";
 import { listCategories } from "../services/categoriesService";
 import { clearCartDraft, getCartDraft, saveCartDraft } from "../services/cartDraftService";
 import { listPaymentMethods } from "../services/paymentMethodsService";
@@ -47,6 +49,7 @@ export function PosPage() {
   const [cartHydrated, setCartHydrated] = useState(false);
 
   const cart = useCart();
+  const headerActionsNode = useHeaderActionsNode();
 
   useEffect(() => {
     let cancelled = false;
@@ -178,10 +181,19 @@ export function PosPage() {
         <span className="register-bar__status">
           Register open · Opening fund {formatMoney(registerSession.openingFund, currency)}
         </span>
-        <Button variant="secondary" onClick={() => setCloseRegisterOpen(true)}>
-          Close Register
-        </Button>
       </div>
+
+      {/* Close Register lives here so it stays with the state it needs
+          (registerSession, closeRegisterOpen), but it's visually rendered
+          in the shared header's top-right corner via a portal — see
+          HeaderActionsContext.tsx. */}
+      {headerActionsNode &&
+        createPortal(
+          <Button variant="secondary" onClick={() => setCloseRegisterOpen(true)}>
+            Close Register
+          </Button>,
+          headerActionsNode,
+        )}
 
       <div className="pos-layout">
         <div className="pos-products">

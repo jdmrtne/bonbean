@@ -1,5 +1,7 @@
+import { useState } from "react";
 import { NavLink, Outlet } from "react-router-dom";
 import { StatusBanners } from "./StatusBanners";
+import { HeaderActionsProvider } from "../context/HeaderActionsContext";
 import { BarChartIcon, CoffeeIcon, FolderIcon, ReceiptIcon } from "./Icon";
 import logoFull from "../assets/logo-full.png";
 import logoMark from "../assets/logo-mark.png";
@@ -12,6 +14,14 @@ const NAV_ITEMS = [
 ];
 
 export function AppShell() {
+  // Target for HeaderActionsProvider below — a page-specific action
+  // (currently just the Close Register button) portals into this node,
+  // which sits in the header's top-right corner (see .app-topbar's
+  // space-between in layout.css). `useState` rather than `useRef` so
+  // that setting it re-renders and the Provider picks up the real node
+  // instead of null on first paint.
+  const [headerActionsNode, setHeaderActionsNode] = useState<HTMLDivElement | null>(null);
+
   return (
     <div className="app-shell">
       <aside className="app-sidebar">
@@ -47,12 +57,15 @@ export function AppShell() {
           </div>
           <span className="app-topbar__page">Stovetop espresso, sold simply</span>
         </div>
+        <div className="app-topbar__actions" ref={setHeaderActionsNode} />
       </header>
 
       <main className="app-main">
         <StatusBanners />
         <div className="app-main__inner">
-          <Outlet />
+          <HeaderActionsProvider node={headerActionsNode}>
+            <Outlet />
+          </HeaderActionsProvider>
         </div>
       </main>
 
