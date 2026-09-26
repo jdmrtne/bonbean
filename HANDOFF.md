@@ -2,13 +2,13 @@
 
 ## Current Phase
 
-PHASE 0 — COMPLETE
+PHASE 1 — COMPLETE
 
 ## Overall Project Progress
 
 ```
 PHASE 0  — Project Foundation           — COMPLETE
-PHASE 1  — Database + Product Mgmt      — NOT STARTED
+PHASE 1  — Database + Product Mgmt      — COMPLETE
 PHASE 2  — POS + Cart                   — NOT STARTED
 PHASE 3  — Sales Recording              — NOT STARTED
 PHASE 4  — Sales History + Dashboard    — NOT STARTED
@@ -22,268 +22,282 @@ PHASE 10 — Final QA + Release           — NOT STARTED
 
 ## What Has Been Built
 
-A running, empty-shell React app:
+Everything from Phase 0 (app shell, routing, design tokens, reusable UI
+primitives, error boundary), **plus**, from Phase 1:
 
-- A 4-tab app shell (POS, History, Reports, Products) that adapts from a
-  bottom tab bar on mobile to a left sidebar on desktop (breakpoint 860px).
-- A small design-token system (colors, type, spacing, radius) so every
-  later phase pulls from the same visual language instead of inventing new
-  ad-hoc styles.
-- Reusable primitives: `Button`, `Card`, `EmptyState`, `ErrorBoundary`.
-- An IndexedDB connection that opens successfully on load (proven via a
-  `useDbReady` hook that gates rendering until the DB is confirmed open or
-  errored). The schema itself is just a placeholder `settings` store —
-  Phase 1 replaces this with the real schema.
-- Shared TypeScript types for the whole domain model (`src/types/index.ts`)
-  so Phase 1 onward has one place to import `Product`, `Sale`, etc. from,
-  rather than redefining shapes per-file.
-- Each of the 4 routes renders a placeholder `EmptyState` naming which
-  phase will build it out, so the shell is honest about what is and isn't
-  real yet.
+- A real IndexedDB schema (see "Database Structure" below) replacing the
+  Phase 0 placeholder, with a working migration path.
+- Default data seeded automatically the first time the database is
+  created: 5 payment methods and default settings — the owner never sees
+  an empty payment-method list at first launch.
+- A full data-access layer (`src/services/*Service.ts`) — nothing in the
+  UI talks to IndexedDB directly.
+- A working Product Management screen at the "Products" tab, with three
+  sub-sections (Products / Categories / Payment Methods) switched by a
+  segmented control, each with its own add/edit modal form.
+- Product photos: optional, stored as base64 data URLs directly in
+  IndexedDB (no server, no file system — works offline by construction).
+- A headless smoke test (`npm run smoke-test`) that exercises the real
+  `db.ts` and service modules end-to-end using `fake-indexeddb`, used in
+  this phase as a stand-in for manual browser QA (this sandboxed
+  environment has no headed browser — see "Testing Status").
 
-No business logic exists yet: no products, no cart, no sales, no reports.
-This phase is infrastructure and shell only, by design.
+Still not built: the POS/cart screen, sales saving, sales history,
+dashboard, reports, exports, backup/restore, offline/PWA support. Those
+are Phases 2–8, in order.
 
 ## Current Architecture
 
-- **Framework:** React 19, function components + hooks only (no class
-  components except `ErrorBoundary`, which React requires to be a class).
-- **Build system:** Vite 8, with `npm run build` running `tsc -b` (project
-  references type-check) then `vite build`.
-- **Language:** TypeScript, strict mode as scaffolded by Vite's
-  `react-ts` template — do not loosen `tsconfig` strictness in later phases.
-- **Database:** IndexedDB via the `idb` package (a small promise-based
-  wrapper around the native IndexedDB API — not a heavier ORM). Chosen
-  because sales history can grow large over time and localStorage is
-  synchronous and size-limited.
-- **Storage:** Everything lives in IndexedDB. No server, no API calls, by
-  design — the app must work with zero network dependency (see Phase 8).
-- **Routing:** `react-router-dom`, using `HashRouter` specifically (not
-  `BrowserRouter`). This matters: a `BrowserRouter` needs server-side
-  fallback routing to support deep links/refreshes, which a static,
-  offline-installed PWA doesn't have. Do not switch this to `BrowserRouter`
-  without re-solving that problem.
-- **Styling:** Plain CSS with custom properties (design tokens), organized
-  into `theme.css` (tokens + resets), `layout.css` (app shell), and
-  `components.css` (buttons/cards/empty states/banners). No Tailwind, no
-  CSS-in-JS, no component library. Tailwind was installed and then
-  deliberately removed in this phase — see "Decisions Already Made" below.
-- **Fonts:** `@fontsource/manrope` self-hosts the Manrope variable font as
-  local files bundled by Vite, imported from `theme.css`. This was chosen
-  over a Google Fonts `<link>` specifically so typography keeps working
-  offline once Phase 8 adds the service worker — a CDN font would silently
-  fail to load with no network.
-- **Components vs. Pages:** `src/components/` holds things reused across
-  more than one screen (or app-shell-level pieces). `src/pages/` holds one
-  file per route, each rendering a full screen.
+Unchanged from Phase 0 (React 19 + TypeScript + Vite, `idb` over
+IndexedDB, `HashRouter`, plain CSS with design tokens, self-hosted
+Manrope font) — see Phase 0's original notes below under "Decisions
+Already Made" for why each of those was chosen. Additions this phase:
+
+- **Data layer:** one service module per IndexedDB store
+  (`productsService`, `categoriesService`, `paymentMethodsService`,
+  `settingsService`). Each exposes plain async functions (`listX`,
+  `addX`, `updateX`, `setXActive`) — no classes, no global state
+  management library. Components call these directly and manage their own
+  local `useState`/`useEffect` for loading/error/refresh, following the
+  pattern in `ProductsManager.tsx` / `CategoriesManager.tsx` /
+  `PaymentMethodsManager.tsx`. Keep this pattern for `salesService` in
+  Phase 3 rather than introducing Redux/Zustand/etc. — the app's data
+  needs are simple enough not to need one.
+- **Forms:** a shared `Modal` component (`src/components/Modal.tsx`,
+  using `createPortal`) hosts all add/edit forms as a bottom sheet on
+  mobile / centered dialog on desktop. Reuse it for the cart review step
+  in Phase 2 and the payment/amount-received step in Phase 3 if a
+  modal fits, rather than building a second modal implementation.
+- **Images:** `src/utils/image.ts`'s `fileToDataUrl` converts an
+  `<input type="file">` selection to a base64 data URL. This keeps images
+  fully offline-safe at the cost of IndexedDB storage size — fine for a
+  cart's product catalog (tens of products), but don't reuse this
+  approach for anything that could involve many large images.
+- **Currency formatting:** `src/utils/money.ts`'s `formatMoney(amount,
+  currencySymbol)` — always read the symbol from `settingsService`
+  (already seeded to `"₱"`) rather than hardcoding `"₱"` in new code, so a
+  future settings screen can let the owner change it.
+- **Dev-only smoke test:** `scripts/smoke-test-db.ts`, run via `npm run
+  smoke-test`. It imports the real `src/database`/`src/services` modules
+  against `fake-indexeddb` (a devDependency) to verify schema/seeding/CRUD
+  logic without a browser. It is **not** part of the production bundle —
+  `scripts/` is intentionally outside both `tsconfig.app.json` and
+  `tsconfig.node.json`'s `include` globs, so it can't affect `tsc -b` or
+  the Vite build. Extend this script in later phases (e.g. add a sales
+  round-trip test in Phase 3) rather than writing a separate one-off
+  script each time — it's cheap insurance given the lack of a headed
+  browser in this environment.
 
 ## Important Files
 
-`src/App.tsx`
-→ Root component. Waits on `useDbReady`, then renders the router. Uses
-`HashRouter` with 4 routes nested under `AppShell`.
-
-`src/main.tsx`
-→ Entry point. Mounts `App` and imports the three global stylesheets in
-order (theme → layout → components).
-
-`src/components/AppShell.tsx`
-→ The persistent frame around every page: sidebar (desktop) / top bar +
-bottom tab bar (mobile). Defines `NAV_ITEMS`, the single source of truth
-for the 4 top-level routes and their icons/labels.
-
-`src/components/ErrorBoundary.tsx`
-→ Class component catching render errors anywhere under it, showing a
-"Try again" banner instead of a blank crashed screen. Wraps the router in
-`App.tsx`.
-
-`src/components/Button.tsx`, `Card.tsx`, `EmptyState.tsx`
-→ Reusable primitives. `Button` supports `variant` (primary/secondary/
-danger/ghost), `size` (md/lg), and `block`. Always use these instead of
-raw `<button>`/`<div className="card">` in later phases, for consistency.
+Everything listed in Phase 0's original handoff (see git history / prior
+version of this file if needed) still applies. New/changed this phase:
 
 `src/database/db.ts`
-→ IndexedDB initialization via `idb`'s `openDB`. Currently only defines a
-placeholder `settings` object store at `DB_VERSION = 1`. **Phase 1 must
-replace `CoffeeCartDBSchema` here with the real schema** (products,
-categories, paymentMethods, sales, saleItems, settings) and bump
-`DB_VERSION`, handling the upgrade path in the `upgrade()` callback.
+→ **Rewritten.** Real schema at `DB_VERSION = 2`: products, categories,
+paymentMethods, sales, saleItems, settings, with the indexes listed under
+"Database Structure" below. The `upgrade()` callback deletes the old
+Phase-0 placeholder `settings` store (which never held real data) and
+creates all 6 real stores, seeding default payment methods and settings
+in the same upgrade transaction. `getDB()` itself is unchanged in shape —
+callers don't need to know about the migration.
 
-`src/hooks/useDbReady.ts`
-→ Opens the DB on mount, exposes `{ status, error }`. `App.tsx` uses this
-to avoid rendering routes before the DB is confirmed usable.
+`src/services/productsService.ts`
+→ `listProducts(includeInactive?)`, `listProductsByCategory(categoryId)`,
+`getProduct(id)`, `addProduct(input)`, `updateProduct(id, changes)`,
+`setProductActive(id, active)`. `updateProduct` always bumps `updatedAt`;
+nothing here ever touches past `SaleItem` snapshots (those don't exist
+yet — Phase 3 must keep it that way).
 
-`src/types/index.ts`
-→ All shared domain types (`Product`, `Category`, `PaymentMethod`, `Sale`,
-`SaleItem`, `Settings`, `CartLine`). These already match the field lists
-in the master spec (e.g. `Sale` has no server id, uses a snapshot pattern
-for `SaleItem.productNameSnapshot` / `unitPriceSnapshot` so historical
-sales don't change if a product's price changes later). Import from here
-rather than redefining these shapes in Phase 1+.
+`src/services/categoriesService.ts`, `paymentMethodsService.ts`
+→ Same CRUD shape as products, plus `moveCategory`/`movePaymentMethod`
+for up/down reordering (swaps `sortOrder` with the adjacent item inside a
+single IndexedDB transaction).
 
-`src/pages/PosPage.tsx`, `HistoryPage.tsx`, `ReportsPage.tsx`,
-`ProductsPage.tsx`
-→ One placeholder per route today. Each will be replaced with real UI in
-the phase noted in its `EmptyState` copy (Phase 2, 4, 5, 1 respectively).
+`src/services/settingsService.ts`
+→ `getSettings()` (returns seeded defaults if the store is somehow empty),
+`updateSettings(changes)`. No UI reads/writes this yet beyond the seed —
+available for Phase 6 (PDF business name) or a future settings screen.
 
-`src/styles/theme.css`
-→ All design tokens as CSS custom properties on `:root` (colors, font
-shorthands, spacing scale, radii, shadows). Read the comment at the top
-before changing the palette — it documents the intent (warm, high-contrast
-"roast gold" palette chosen specifically to avoid the generic cream +
-terracotta AI-generated look, and to stay legible outdoors).
+`src/components/ProductsManager.tsx`, `CategoriesManager.tsx`,
+`PaymentMethodsManager.tsx`
+→ The three list+form UIs shown under the Products tab's segmented
+control. Each follows the same shape: load-on-mount via `useEffect`,
+local `refresh()` re-fetches after any mutation, an inline modal form
+component defined in the same file for add/edit.
 
-`src/styles/layout.css`
-→ App shell layout only: top bar, sidebar, bottom tab bar, and the
-mobile/desktop breakpoint (860px).
+`src/components/Modal.tsx`
+→ Portal-based modal/bottom-sheet, used by all three managers above.
+Closes on Escape or backdrop click.
 
-`src/styles/components.css`
-→ Shared component styles: `.btn` variants, `.card`, `.empty-state`,
-`.banner`, `.page-header`.
+`src/pages/ProductsPage.tsx`
+→ **Rewritten.** Now hosts the segmented control (Products / Categories /
+Payment Methods) and renders the matching manager component. No longer a
+placeholder.
+
+`src/utils/id.ts`, `money.ts`, `image.ts`
+→ Small pure helpers: UUID generation, currency formatting, file→base64.
+
+`scripts/smoke-test-db.ts`
+→ Headless data-layer test, see "Current Architecture" above.
 
 ## Database Structure
 
-Only a placeholder exists today. **This is what Phase 1 needs to build**,
-per the master spec:
-
 ```
-products:
-  id, name, categoryId, price, image, active, createdAt, updatedAt
+products (keyPath: id)
+  id, name, categoryId, price, image?, active, createdAt, updatedAt
+  indexes: by-categoryId (categoryId), by-active (active)
 
-categories:
+categories (keyPath: id)
   id, name, active, sortOrder
+  index: by-sortOrder (sortOrder)
 
-paymentMethods:
+paymentMethods (keyPath: id)
   id, name, active, sortOrder
+  index: by-sortOrder (sortOrder)
 
-sales:
-  id, date, time, items, total, paymentMethod, amountReceived, change,
-  notes, createdAt
+sales (keyPath: id)                          ← store exists, unused until Phase 3
+  id, date, time, items, total, paymentMethod, amountReceived?, change?, notes?, createdAt
+  index: by-date (date)
 
-saleItems:
-  id, saleId, productId, productNameSnapshot, unitPriceSnapshot,
-  quantity, lineTotal
+saleItems (keyPath: id)                      ← store exists, unused until Phase 3
+  id, saleId, productId, productNameSnapshot, unitPriceSnapshot, quantity, lineTotal
+  indexes: by-saleId (saleId), by-productId (productId)
 
-settings:
+settings (out-of-line key, single record stored under key "app")
   businessName, currency
 ```
 
-The exact field shapes already exist as TypeScript types in
-`src/types/index.ts` — Phase 1 should make the IndexedDB object stores
-match those types (and add any IndexedDB-specific indexes it needs, e.g.
-an index on `sales.date` for reports).
-
-The current placeholder in `src/database/db.ts`:
-
-```
-settings: { key: string, value: unknown }   ← placeholder only, replace in Phase 1
-```
+`DB_NAME = "coffee-cart-pos"`, `DB_VERSION = 2`. `sales`/`saleItems` are
+created now (empty) so Phase 3 doesn't need another schema migration —
+just start writing to them.
 
 ## Completed Features
 
-- App shell with working navigation (mobile bottom tabs + desktop sidebar)
-- Responsive layout down to small phone widths
-- Design token system and reusable UI primitives
-- IndexedDB connection proven to open successfully
-- Error boundary for render-time crashes
-
-No end-user-facing POS features exist yet (no products, cart, sales,
-reports, export, backup, or offline support — those are Phases 1–8).
+- Product Management: add / edit / deactivate / reactivate products,
+  with category assignment, price, and optional photo
+- Category management: add / edit / activate / deactivate / reorder
+- Payment method management: add / edit / activate / deactivate /
+  reorder, seeded with the 5 defaults from the master spec
+- All data persists in IndexedDB (verified via headless smoke test)
+- (Carried from Phase 0) responsive app shell, navigation, design system,
+  error boundary
 
 ## Known Issues
 
-- None discovered in Phase 0's scope.
-- **Not verified on a real phone/tablet or in a headed desktop browser.**
-  This sandboxed dev environment could only verify the app via
-  `tsc -b`, `vite build`, `oxlint`, and serving the built output over HTTP
-  (checked with `curl`, confirming valid HTML/JS/CSS output and a 200
-  response) — there was no headed browser available to visually confirm
-  rendering or click through the UI. Whoever picks up Phase 1 should do a
-  quick `npm run dev` + manual click-through (and ideally a real phone
-  check) before assuming the shell is pixel-correct, since this has not
-  been visually confirmed by a human or a screenshot yet.
+- **Still not verified in a real headed browser or on a mobile device.**
+  This phase was verified via: `tsc -b`, `npm run build`, `npx oxlint`,
+  serving the build with `vite preview` + `curl` (confirms the app loads
+  and returns 200), and a new headless data-layer smoke test
+  (`npm run smoke-test`) that exercises the actual database/service code
+  against `fake-indexeddb`. None of these substitute for a human clicking
+  through the add/edit/deactivate flows, checking the modal's mobile
+  layout, or testing the photo picker on a real device — do that before
+  or during Phase 2.
+- No confirmation dialog before deactivating a product, category, or
+  payment method. Deliberate for now (it's reversible, unlike the
+  delete-with-confirmation flow required for sales history in Phase 4) —
+  see "Decisions Already Made".
+- No UI yet for editing `settings` (businessName/currency) — the store and
+  service exist and are seeded, just no screen. Not required by Phase 1's
+  brief; add one if/when a later phase needs the owner to change it.
+- If a product's only category is deactivated, the product isn't
+  automatically hidden or reassigned — Phase 2 (POS product grid) should
+  decide how to handle a product whose category is inactive (recommend:
+  filter it out of the POS grid, same as an inactive product, without
+  changing its stored data).
 
 ## Decisions Already Made
 
-- **IndexedDB (via `idb`) instead of localStorage** — sales history can
-  grow large over the life of the cart, and localStorage is synchronous,
-  string-only, and size-capped. Do not switch to localStorage.
-- **`HashRouter` instead of `BrowserRouter`** — the app has to work
-  installed offline as a static PWA with no server; `HashRouter` needs no
-  server-side rewrite rules to support refresh/deep-linking. Do not switch
-  to `BrowserRouter` without solving that problem first (e.g. a static
-  fallback + service worker rewrite), and only if there's a real reason to.
-- **Plain CSS with custom properties instead of Tailwind** — Tailwind was
-  installed, then removed in this same phase. Reasoning: this project is a
-  small, long-lived, multi-session app where a consistent, deliberately
-  designed look (see `frontend-design` guidance the assistant was given)
-  matters more than utility-class velocity, and a hand-rolled token system
-  is easier for a future session to read and extend consistently than
-  reverse-engineering intent from utility classes. If a future phase
-  strongly prefers Tailwind, that's a reasonable call to revisit — just do
-  it deliberately and update this doc, don't silently reintroduce it.
-- **Self-hosted font (`@fontsource/manrope`) instead of a Google Fonts
-  `<link>`** — the app must keep working offline (Phase 8), and a CDN font
-  link would break once offline/uninstalled from cache. Bundling the font
-  as a local asset avoids that failure mode entirely.
-- **Snapshot pattern for sale line items** — `SaleItem` stores
-  `productNameSnapshot` and `unitPriceSnapshot` rather than only a
-  `productId` foreign key, so that editing a product's price or name later
-  never changes historical sales. This is called out explicitly in the
-  master spec and is already reflected in `src/types/index.ts` — Phase 1's
-  actual sale-saving logic must populate these snapshot fields at save
-  time, not read live product data when displaying old sales.
-- **No UI framework/component library** (no MUI, no shadcn, etc.) — kept
-  deliberately minimal given the app's small, focused feature set.
+Carried from Phase 0 (still true, don't change without good reason):
+IndexedDB over localStorage; `HashRouter` over `BrowserRouter`; plain CSS
+over Tailwind; self-hosted Manrope over a Google Fonts link; the
+`SaleItem` snapshot pattern.
+
+New in Phase 1:
+
+- **Soft delete only, everywhere.** Products, categories, and payment
+  methods are never hard-deleted — only deactivated (`active: false`).
+  This is required by the master spec for products (so historical sales
+  keep referencing a real, if inactive, product) and was applied
+  consistently to categories and payment methods too, for the same
+  reason and for UI consistency. Do not add a hard-delete path for these
+  without re-checking this reasoning.
+- **No confirmation dialog for deactivation.** Deactivating is a
+  one-tap, instantly-reversible toggle, unlike the sales-history deletion
+  in Phase 4 (which the master spec explicitly requires a confirmation
+  for). Kept deliberately lightweight for a non-technical owner doing
+  routine catalog upkeep.
+- **Reorder via up/down buttons, not drag-and-drop.** A drag-and-drop
+  library is unnecessary complexity for what's usually a handful of
+  categories/payment methods; up/down buttons are simpler to implement
+  correctly and are still touch-friendly. Revisit only if a real owner
+  finds this annoying with a longer list.
+- **Product photos as inline base64 data URLs**, not file references or
+  a blob store. Simplest thing that (a) works fully offline, (b) survives
+  `BACKUP`/`RESTORE` in Phase 7 for free (it's just JSON), and (c) needs
+  no additional IndexedDB object store for blobs. Trade-off: larger
+  IndexedDB size per product with a photo — acceptable for a small coffee
+  cart catalog.
+- **`fake-indexeddb` + `tsx` added as devDependencies**, purely to run
+  `scripts/smoke-test-db.ts`. Neither ships in the production build
+  (`scripts/` is excluded from both tsconfigs, and devDependencies aren't
+  bundled by Vite). This is a deliberate stand-in for the manual browser
+  QA this sandboxed environment can't perform — keep extending this
+  script in future phases rather than trusting build-passes alone.
 
 ## DO NOT CHANGE
 
-- The `HashRouter` choice (see above) — changing it has offline
-  implications that later phases depend on.
-- The `SaleItem` snapshot fields (`productNameSnapshot`,
-  `unitPriceSnapshot`) — this is a hard requirement from the master spec,
-  not an implementation detail.
-- The design tokens in `theme.css` without good reason — later phases
-  should extend this system (add new tokens as needed) rather than
-  hardcoding one-off colors/spacing in component files.
-- The folder structure (`components/`, `pages/`, `database/`, `services/`,
-  `hooks/`, `utils/`, `types/`, `styles/`) — it matches the master spec
-  exactly; keep new files sorted into the right one of these.
+Everything listed in Phase 0's version of this section (HashRouter,
+`SaleItem` snapshot fields, the design tokens, the top-level folder
+structure) — still applies. Additionally, as of Phase 1:
+
+- The soft-delete-only pattern for products/categories/payment methods.
+- The `products`/`categories`/`paymentMethods`/`sales`/`saleItems`/
+  `settings` store names and their keyPaths — Phase 3+ code and this
+  handoff both assume these exact names.
+- `DB_VERSION` must only ever increase, and every future schema change
+  must go through `upgrade()`'s version-gated migration path (following
+  the `if (oldVersion < N)` pattern already used) — never edit the
+  Phase-1 migration block in place once it has shipped to a real device
+  with real data, or that device's upgrade will be skipped.
 
 ## Next Phase
 
-**PHASE 1 — Database + Product Management.** See `NEXT_PHASE_PROMPT.md`
-for the exact brief to hand to the next Claude session.
+**PHASE 2 — POS + Cart.** See `NEXT_PHASE_PROMPT.md` for the exact brief.
 
 ## Recommended First Steps
 
 1. Read `README.md`, `PROJECT_STATUS.md`, this file, and
    `NEXT_PHASE_PROMPT.md`.
-2. Run `npm install && npm run dev`, click through all 4 tabs on both a
-   narrow (mobile-width) and wide (desktop-width) browser window, and
-   confirm the shell looks and behaves as described above — this has not
-   yet been visually confirmed by a human, so treat that check as part of
-   Phase 1's setup, not optional.
-3. Open `src/database/db.ts` and `src/types/index.ts` side by side; design
-   the real IndexedDB schema (stores + indexes + `upgrade()` migration from
-   version 1 to 2) to match the types already defined.
-4. Build a `src/services/` module per store (e.g. `productsService.ts`,
-   `categoriesService.ts`, `paymentMethodsService.ts`, `settingsService.ts`)
-   with basic CRUD, rather than calling `idb` directly from components.
-5. Build the Product Management UI inside `src/pages/ProductsPage.tsx`,
-   replacing its current `EmptyState` placeholder.
-6. Test add/edit/deactivate/reactivate for products, categories, and
-   payment methods; confirm a browser refresh doesn't lose data.
-7. Update `PROJECT_STATUS.md`, `HANDOFF.md`, and replace
-   `NEXT_PHASE_PROMPT.md` with Phase 2 instructions before stopping.
+2. Run `npm install && npm run dev`. Add a category, a payment method, and
+   a couple of products (with and without a photo) through the Products
+   tab; confirm they persist after a refresh. This is real manual QA this
+   environment couldn't do — treat it as step zero, not optional.
+3. Run `npm run smoke-test` to confirm the data layer still passes after
+   your own changes as you go.
+4. Read `src/types/index.ts`'s `CartLine` type — it's already shaped for
+   the cart you're about to build.
+5. Build the POS product grid in `src/pages/PosPage.tsx`, reading
+   categories/products via the existing services (filter to `active`
+   only, and to categories that are `active`).
+6. Build cart state (likely a `useState<CartLine[]>` in `PosPage` or a
+   small `useCart` hook in `src/hooks/`) with add/increase/decrease/
+   remove/clear and a computed subtotal/total.
+7. Build the mobile floating "VIEW ORDER — ₱450" bar and the
+   desktop products-left/cart-right layout, per the master spec.
+8. Update `PROJECT_STATUS.md`, `HANDOFF.md`, and replace
+   `NEXT_PHASE_PROMPT.md` with Phase 3 instructions before stopping.
 
 ## Testing Status
 
 | Check | Result |
 |---|---|
 | `npx tsc -b` (type-check) | ✅ Pass, 0 errors |
-| `npm run build` (tsc -b + vite build) | ✅ Pass, builds to `dist/` |
-| `npx oxlint` | ✅ Pass, 0 warnings / 0 errors |
-| `vite preview` served over HTTP, checked with `curl` | ✅ 200 OK, valid HTML/JS/CSS returned |
-| Manual click-through in a real/headed browser | ❌ Not done — no headed browser available in this environment. Recommended as the first thing the next session does. |
-| Real mobile device check | ❌ Not done — recommended before/around Phase 1 or 2. |
+| `npm run build` (tsc -b + vite build) | ✅ Pass |
+| `npx oxlint` | ✅ Pass, 0 errors (3 expected warnings — see "Current Architecture" note on the load-on-mount pattern) |
+| `npm run smoke-test` (headless DB/services test via fake-indexeddb) | ✅ All 12 assertions pass |
+| `vite preview` served over HTTP, checked with `curl` | ✅ 200 OK |
+| Manual click-through in a real/headed browser | ❌ Still not done — no headed browser available in this environment |
+| Real mobile device check | ❌ Still not done |
+| Confirmed Phase 0's POS/History/Reports placeholder pages are byte-for-byte unchanged | ✅ Verified with `git diff` against the Phase 0 commit |

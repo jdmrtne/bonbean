@@ -10,90 +10,99 @@ First:
 2. Read PROJECT_STATUS.md
 3. Read HANDOFF.md
 4. Read this file (NEXT_PHASE_PROMPT.md)
-5. Inspect the existing source code, especially `src/types/index.ts` and
-   `src/database/db.ts`
-6. Run `npm install && npm run dev`, and click through all 4 tabs
-   (POS / History / Reports / Products) at both a mobile width and a
-   desktop width, to confirm the existing shell works before changing
-   anything. (This has not yet been visually confirmed in a headed browser
-   — see "Testing Status" in HANDOFF.md.)
+5. Inspect the existing source code, especially `src/types/index.ts`
+   (note the `CartLine` type, already shaped for this phase),
+   `src/services/productsService.ts`, and `src/services/categoriesService.ts`
+6. Run `npm install && npm run dev`. Add a category, a payment method, and
+   a couple of products through the Products tab; confirm they persist
+   after a refresh, before changing anything.
+7. Run `npm run smoke-test` to confirm the data layer is healthy.
 
 Current phase:
 
-PHASE 1
+PHASE 2
 
 Previous phases completed:
 
 PHASE 0 — Project Foundation
+PHASE 1 — Database + Product Management
 
 Your task is to implement:
 
-## PHASE 1 — DATABASE + PRODUCT MANAGEMENT
+## PHASE 2 — POS + CART
 
-Build the real data layer, replacing the Phase 0 placeholder in
-`src/database/db.ts`.
+Build the main POS screen in `src/pages/PosPage.tsx`, replacing its
+current placeholder.
 
-Create IndexedDB object stores for:
+The POS must have:
 
-- `products` — id, name, categoryId, price, image, active, createdAt, updatedAt
-- `categories` — id, name, active, sortOrder
-- `paymentMethods` — id, name, active, sortOrder
-- `sales` — id, date, time, items, total, paymentMethod, amountReceived, change, notes, createdAt
-- `saleItems` — id, saleId, productId, productNameSnapshot, unitPriceSnapshot, quantity, lineTotal
-- `settings` — businessName, currency
+- Product categories (tabs or a horizontal scroller) — read active
+  categories via `categoriesService.listCategories(false)`
+- A product grid filtered to the selected category — read active products
+  via `productsService.listProducts(false)` (or
+  `listProductsByCategory`), further filtered to products whose category
+  is also active (see "Known Issues" in HANDOFF.md — this wasn't decided
+  in Phase 1, decide and document it now)
+- Large, touch-friendly product buttons showing name, price (use
+  `utils/money.ts`'s `formatMoney` with the seeded currency symbol from
+  `settingsService.getSettings()`), and respecting `active`
+- Tapping a product adds it to the cart (or increments quantity if already
+  in the cart)
 
-These field shapes already exist as TypeScript types in
-`src/types/index.ts` — match the object stores to those types, and add
-whatever indexes you need (at minimum, an index on `sales.date` will help
-Phase 5's reports later, and an index on `products.categoryId` will help
-Phase 2's product grid).
+Cart must support:
 
-Bump `DB_VERSION` in `src/database/db.ts` and handle the migration inside
-the `upgrade()` callback so upgrading from the Phase 0 placeholder schema
-doesn't throw or lose data.
+- Increase quantity
+- Decrease quantity (removing the line at 0)
+- Remove item directly
+- Clear cart
+- Show subtotal per line and a running total
 
-Build CRUD services (e.g. `src/services/productsService.ts`,
-`categoriesService.ts`, `paymentMethodsService.ts`,
-`settingsService.ts`) rather than calling `idb` directly from components.
+Build cart state as a small reusable hook (e.g. `src/hooks/useCart.ts`)
+using the existing `CartLine` type from `src/types/index.ts` — don't
+invent a new shape. Cart state can live in memory only for this phase
+(no need to persist a draft cart to IndexedDB yet, unless you judge it
+useful for Phase 3's "New Sale" reset flow — your call, document it either
+way).
 
-Build the Product Management screen, replacing the placeholder in
-`src/pages/ProductsPage.tsx`. The owner (a non-technical person) must be
-able to, from this screen:
+Layout, per the master spec:
 
-- Add a product (name, category, price, optional image)
-- Edit a product
-- Deactivate a product (soft delete — do not hard-delete, since historical
-  sales reference products)
-- Reactivate a deactivated product
-- Change a product's price or category
-- Manage categories (add / edit / deactivate / reorder)
-- Manage payment methods (add / edit / deactivate / reorder) — seed with
-  the defaults from the master spec: Cash, GCash, Maya, Bank Transfer, Other
+- **Mobile:** product grid fills the screen; a floating bar pinned above
+  the bottom tab bar reads `VIEW ORDER — {total}` and opens the cart
+  (as a bottom sheet — reuse the existing `Modal` component from Phase 1,
+  or build a dedicated cart sheet if `Modal`'s shape doesn't fit; your
+  call, document which you picked and why)
+- **Desktop:** products on the left, cart visible at all times on the
+  right (no floating bar needed at this width)
 
-**Critical rule from the master spec, already reflected in
-`src/types/index.ts`:** historical sales must never change when a
-product's price changes later. This phase doesn't create sales yet (that's
-Phase 3), but keep this in mind while designing the products service — do
-not build anything that would make Phase 3 read live product prices for
-old sales instead of the `SaleItem` snapshot fields.
+Do not implement payment selection or saving the sale yet — this phase
+stops at "review order with an accurate total." Payment selection and
+saving belong to Phase 3. It's fine (expected) for the cart's checkout
+button to be a visible placeholder that does nothing yet, or to be
+deferred entirely to Phase 3 — your call, just be explicit in the docs
+about what's real vs. not yet wired up.
 
-Do not break existing functionality: the app shell, navigation, and the 3
-other placeholder pages (POS, History, Reports) must keep working exactly
-as they do now.
+Do not break existing functionality: Product Management (Phase 1) and the
+History/Reports placeholders (Phase 0) must keep working exactly as they
+do now.
 
 After completing the phase:
 
-- Test everything (add/edit/deactivate/reactivate for products,
-  categories, and payment methods; refresh the browser and confirm data
-  persists; confirm the other 3 tabs still work).
-- Run `npx tsc -b`, `npm run build`, and `npx oxlint`, and fix anything
-  they flag.
+- Test everything manually: switch categories, tap products, adjust
+  quantities every way (increase/decrease/remove/clear), confirm the
+  total is always correct, check both a mobile-width and desktop-width
+  browser window, and confirm long product names and larger peso amounts
+  don't break the layout.
+- Extend `scripts/smoke-test-db.ts` if you add any new service-layer logic
+  (e.g. a cart-total helper worth unit-testing outside a component) —
+  optional, use your judgment; the cart itself is UI state, not
+  IndexedDB-backed, so it may not need a headless test.
+- Run `npx tsc -b`, `npm run build`, `npx oxlint`, and `npm run
+  smoke-test`, and fix anything they flag.
 - Update `PROJECT_STATUS.md`.
-- Update `HANDOFF.md` (Important Files, Database Structure, Completed
-  Features, Decisions Already Made, DO NOT CHANGE, Testing Status
-  sections all need updating).
+- Update `HANDOFF.md` (What Has Been Built, Important Files, Completed
+  Features, Decisions Already Made, Known Issues, Testing Status).
 - Replace this file (`NEXT_PHASE_PROMPT.md`) with instructions for
-  PHASE 2 — POS + Cart.
+  PHASE 3 — Sales Recording.
 
-Do NOT start Phase 2. Stop once Phase 1 is tested and documented, and tell
-the project owner Phase 1 is ready for handoff.
+Do NOT start Phase 3. Stop once Phase 2 is tested and documented, and tell
+the project owner Phase 2 is ready for handoff.
