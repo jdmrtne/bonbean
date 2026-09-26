@@ -1,10 +1,11 @@
-// In-memory cart state for the POS screen (PHASE 2).
+// Cart state for the POS screen (PHASE 2).
 //
-// Deliberately NOT persisted to IndexedDB: the master spec's Phase 2 brief
-// says a draft cart may stay in memory only, and there's no requirement yet
-// for the cart to survive a reload mid-order. Revisit only if a real owner
-// reports losing an in-progress order (e.g. from an accidental refresh) —
-// see HANDOFF.md "Decisions Already Made".
+// PHASE 10: the cart itself is still plain in-memory React state here —
+// this hook still knows nothing about IndexedDB — but its lines are now
+// mirrored to IndexedDB by the caller (see pages/PosPage.tsx and
+// services/cartDraftService.ts) so an in-progress order survives a
+// refresh/reopen. `restore` below exists for that caller to hydrate this
+// hook from a previously-persisted draft on mount.
 import { useMemo, useState } from "react";
 import type { CartLine } from "../types";
 
@@ -25,6 +26,9 @@ export interface UseCartResult {
   decrease: (productId: string) => void;
   removeLine: (productId: string) => void;
   clear: () => void;
+  // Replaces the entire cart wholesale (not a merge) — used once, on
+  // mount, to hydrate a persisted draft. See pages/PosPage.tsx.
+  restore: (lines: CartLine[]) => void;
 }
 
 export function useCart(): UseCartResult {
@@ -83,6 +87,10 @@ export function useCart(): UseCartResult {
     setLines([]);
   }
 
+  function restore(newLines: CartLine[]) {
+    setLines(newLines);
+  }
+
   const total = useMemo(
     () => lines.reduce((sum, line) => sum + line.unitPrice * line.quantity, 0),
     [lines],
@@ -93,5 +101,5 @@ export function useCart(): UseCartResult {
     [lines],
   );
 
-  return { lines, itemCount, total, addProduct, increase, decrease, removeLine, clear };
+  return { lines, itemCount, total, addProduct, increase, decrease, removeLine, clear, restore };
 }

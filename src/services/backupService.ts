@@ -8,7 +8,7 @@
 // AND database/db.ts — same separation reportStats.ts/salesExport.ts keep
 // from their own "pure logic vs. IndexedDB" halves.
 import { getDB, SETTINGS_KEY } from "../database/db";
-import type { Settings } from "../types";
+import type { PaymentMethod, Settings } from "../types";
 import { BACKUP_FORMAT_VERSION, type BackupFile } from "../utils/backup";
 
 const FALLBACK_SETTINGS: Settings = { businessName: "My bon&bean", currency: "₱" };
@@ -73,6 +73,11 @@ export async function buildBackupFile(): Promise<BackupFile> {
 // (same multi-store-transaction shape as salesService.ts's recordSale/
 // deleteSale), so a failure partway through can't leave the database in a
 // half-restored state — IndexedDB rolls the whole transaction back.
+//
+// `cartDraft` (PHASE 10) is deliberately NOT one of these six stores: an
+// in-progress, unsaved cart isn't part of what a backup is meant to
+// capture (see services/cartDraftService.ts), so restoring a backup
+// leaves whatever draft cart is currently on this device untouched.
 export async function restoreBackup(payload: BackupFile): Promise<void> {
   const db = await getDB();
   const storeNames = [
@@ -91,7 +96,25 @@ export async function restoreBackup(payload: BackupFile): Promise<void> {
   await Promise.all([
     ...payload.products.map((p) => tx.objectStore("products").put(p)),
     ...payload.categories.map((c) => tx.objectStore("categories").put(c)),
-    ...payload.paymentMethods.map((m) => tx.objectStore("paymentMethods").put(m)),
+    // PHASE 10: a backup made before the `isCash` field existed (see
+    // types/index.ts) won't have it on its payment methods at all —
+    // BACKUP_FORMAT_VERSION wasn't bumped for this, since
+    // validateBackupFile's shape check doesn't inspect individual
+    // PaymentMethod fields either way. Backfilled here with the exact
+    // same rule as database/db.ts's own migration, so restoring an old
+    // backup behaves identically to upgrading an old database: only a
+    // method literally named "Cash" (case-insensitive) comes back as
+    // cash-accepting. A backup that already has the field (current
+    // format) is written through untouched.
+    ...payload.paymentMethods.map((m) =>
+      tx.objectStore("paymentMethods").put({
+        ...m,
+        isCash:
+          typeof (m as Partial<PaymentMethod>).isCash === "boolean"
+            ? m.isCash
+            : m.name.trim().toLowerCase() === "cash",
+      }),
+    ),
     ...payload.sales.map((s) => tx.objectStore("sales").put(s)),
     ...payload.saleItems.map((i) => tx.objectStore("saleItems").put(i)),
     tx.objectStore("settings").put(payload.settings, SETTINGS_KEY),

@@ -17,6 +17,21 @@ interface CartPanelProps {
 export function CartPanel({ cart, currency, onCheckout }: CartPanelProps) {
   const { lines, total, increase, decrease, removeLine, clear } = cart;
 
+  // PHASE 10: confirm before clearing a non-empty cart — this button only
+  // ever renders once `lines.length > 0` (see the empty-cart early return
+  // right below), so the length check here is just a defensive guard,
+  // not the thing that actually prevents an accidental silent clear.
+  function handleClear() {
+    if (lines.length === 0) {
+      clear();
+      return;
+    }
+    const confirmed = window.confirm(
+      "Clear current order?\n\nAll items currently in the cart will be removed.",
+    );
+    if (confirmed) clear();
+  }
+
   if (lines.length === 0) {
     return (
       <EmptyState
@@ -85,7 +100,7 @@ export function CartPanel({ cart, currency, onCheckout }: CartPanelProps) {
       </div>
 
       <div className="cart-panel__actions">
-        <Button variant="secondary" onClick={clear}>
+        <Button variant="secondary" onClick={handleClear}>
           Clear cart
         </Button>
         <Button variant="primary" size="lg" block onClick={onCheckout}>

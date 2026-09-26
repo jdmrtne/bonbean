@@ -25,6 +25,15 @@ export interface PaymentMethod {
   name: string;
   active: boolean;
   sortOrder: number;
+  // PHASE 10: whether this method should show the cash-received/change
+  // fields at checkout. Previously this was inferred by matching the
+  // method's name against the literal string "Cash" (see
+  // CheckoutModal.tsx's old isCashMethod helper) — fragile, since
+  // renaming the seeded "Cash" method silently broke cash handling.
+  // Existing installs are migrated in database/db.ts's upgrade() so
+  // every payment method created before this field existed gets a
+  // sensible default (true only for a method literally named "Cash").
+  isCash: boolean;
 }
 
 export interface SaleItem {

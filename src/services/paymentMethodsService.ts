@@ -8,7 +8,10 @@ export async function listPaymentMethods(includeInactive = true): Promise<Paymen
   return includeInactive ? all : all.filter((p) => p.active);
 }
 
-export async function addPaymentMethod(input: { name: string }): Promise<PaymentMethod> {
+export async function addPaymentMethod(input: {
+  name: string;
+  isCash?: boolean;
+}): Promise<PaymentMethod> {
   const db = await getDB();
   const existing = await db.getAll("paymentMethods");
   const nextSortOrder = existing.length
@@ -19,6 +22,7 @@ export async function addPaymentMethod(input: { name: string }): Promise<Payment
     id: generateId(),
     name: input.name.trim(),
     active: true,
+    isCash: input.isCash ?? false,
     sortOrder: nextSortOrder,
   };
   await db.add("paymentMethods", method);
@@ -27,7 +31,7 @@ export async function addPaymentMethod(input: { name: string }): Promise<Payment
 
 export async function updatePaymentMethod(
   id: string,
-  changes: Partial<Pick<PaymentMethod, "name" | "active" | "sortOrder">>,
+  changes: Partial<Pick<PaymentMethod, "name" | "active" | "sortOrder" | "isCash">>,
 ): Promise<void> {
   const db = await getDB();
   const existing = await db.get("paymentMethods", id);

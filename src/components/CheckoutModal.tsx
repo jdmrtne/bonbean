@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "./Button";
 import { Modal } from "./Modal";
 import { CheckCircleIcon } from "./Icon";
@@ -19,18 +19,6 @@ interface CheckoutModalProps {
   onDone: () => void;
 }
 
-// A payment method is treated as "cash" (and gets the cash-received /
-// change fields) purely by matching its name, case-insensitively — there's
-// no separate "isCash" flag in the PaymentMethod type. This is a
-// deliberate simplification for Phase 3: it covers the seeded "Cash"
-// default correctly, but an owner who renames it (e.g. to a local term)
-// would stop seeing the cash fields. See HANDOFF.md "Known Issues" — a
-// dedicated flag on PaymentMethod would be the more robust fix, left for
-// a later phase if this turns out to matter in practice.
-function isCashMethod(method: PaymentMethod | undefined): boolean {
-  return (method?.name ?? "").trim().toLowerCase() === "cash";
-}
-
 export function CheckoutModal({
   cart,
   currency,
@@ -45,11 +33,26 @@ export function CheckoutModal({
   const [savedSale, setSavedSale] = useState<{ total: number; change?: number } | null>(null);
 
   const selectedMethod = paymentMethods.find((m) => m.id === selectedMethodId);
-  const cashRequired = isCashMethod(selectedMethod);
+  // PHASE 10: cash handling now depends on the payment method's own
+  // `isCash` flag (set in the Payment Methods editor) rather than
+  // matching its name against the literal string "Cash" — see
+  // types/index.ts and database/db.ts's migration for the full reasoning.
+  const cashRequired = selectedMethod?.isCash ?? false;
 
   const parsedCash = Number(cashReceived);
   const hasValidCash = cashReceived.trim() !== "" && Number.isFinite(parsedCash);
   const changePreview = cashRequired && hasValidCash ? parsedCash - cart.total : null;
+
+  // Switching payment methods must never leave a stale cash-received
+  // value or error behind — e.g. typing an amount under a cash method,
+  // then switching to GCash and back, or switching straight from one
+  // cash-accepting method to another. Resetting on every selection
+  // change (including the initial one, harmlessly) is simpler and safer
+  // than trying to special-case which switches "count".
+  useEffect(() => {
+    setCashReceived("");
+    setFormError(null);
+  }, [selectedMethodId]);
 
   async function handleSave() {
     if (!selectedMethod) {

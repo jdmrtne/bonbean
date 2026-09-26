@@ -664,9 +664,14 @@ button.list-row:hover {
 
 .cart-line__name {
   font: var(--text-heading);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  /* PHASE 10: was single-line with an ellipsis (nowrap + text-overflow),
+     which still truncated a sufficiently long name even after Phase 9's
+     gap-tightening gave it more room back (see HANDOFF.md's "Known
+     Issues" — e.g. "Large Iced Caramel Macchiato" on a 390px screen).
+     Wrapping to a second line instead keeps the full name readable,
+     which matters more here than in a compact list row: this is the
+     order the owner is about to charge someone for. */
+  overflow-wrap: anywhere;
 }
 
 .cart-line__unit {

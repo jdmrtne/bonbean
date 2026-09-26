@@ -11,7 +11,7 @@ import "fake-indexeddb/auto";
 async function main() {
   const { getDB } = await import("../src/database/db");
   const { addCategory, listCategories } = await import("../src/services/categoriesService");
-  const { addPaymentMethod, listPaymentMethods } = await import(
+  const { addPaymentMethod, listPaymentMethods, updatePaymentMethod } = await import(
     "../src/services/paymentMethodsService"
   );
   const { addProduct, listProducts, updateProduct, setProductActive } = await import(
@@ -29,6 +29,11 @@ async function main() {
   const methods = await listPaymentMethods();
   assert(methods.length === 5, "5 default payment methods seeded");
   assert(methods[0].name === "Cash", "Cash is the first default payment method");
+  assert(methods[0].isCash === true, "the default Cash method has isCash = true");
+  assert(
+    methods.slice(1).every((m) => m.isCash === false),
+    "every other default payment method has isCash = false",
+  );
 
   const settings = await getSettings();
   assert(settings.currency === "₱", "default currency seeded as ₱");
@@ -428,9 +433,62 @@ async function main() {
     "restoreBackup restores settings from the backup",
   );
 
+  // 11. Cash payment configuration (PHASE 10)
+  // -- isCash now drives cash handling instead of matching the method's
+  // name against the literal string "Cash" (see CheckoutModal.tsx and
+  // database/db.ts's migration comment). --
+  const gcash = methods.find((m) => m.name === "GCash");
+  assert(gcash !== undefined, "sanity check: default GCash method exists");
+  const customCashMethod = await addPaymentMethod({ name: "Boss's IOU", isCash: true });
+  assert(
+    customCashMethod.isCash === true,
+    "addPaymentMethod respects an explicit isCash: true",
+  );
+  const defaultedMethod = await addPaymentMethod({ name: "Voucher" });
+  assert(
+    defaultedMethod.isCash === false,
+    "addPaymentMethod defaults isCash to false when omitted",
+  );
+  if (gcash) {
+    await updatePaymentMethod(gcash.id, { isCash: true });
+    const methodsAfterFlip = await listPaymentMethods();
+    const flippedGcash = methodsAfterFlip.find((m) => m.id === gcash.id);
+    assert(
+      flippedGcash?.isCash === true,
+      "updatePaymentMethod can flip an existing method's isCash on",
+    );
+  }
+
+  // 12. Cart draft persistence (PHASE 10)
+  // -- an in-progress cart is now mirrored to its own `cartDraft` store
+  // (services/cartDraftService.ts) so a refresh/reopen restores it; see
+  // pages/PosPage.tsx for how the live UI wires this up (not exercised
+  // here, since PosPage is a React component — this only covers the
+  // persistence layer it calls into). --
+  const { getCartDraft, saveCartDraft, clearCartDraft } = await import(
+    "../src/services/cartDraftService"
+  );
+  const emptyDraft = await getCartDraft();
+  assert(
+    Array.isArray(emptyDraft) && emptyDraft.length === 0,
+    "getCartDraft returns an empty array before anything is saved",
+  );
+  const draftLines = [
+    { productId: extraProduct.id, name: "Muffin", unitPrice: 70, quantity: 2 },
+  ];
+  await saveCartDraft(draftLines);
+  const savedDraft = await getCartDraft();
+  assert(
+    savedDraft.length === 1 && savedDraft[0].quantity === 2,
+    "saveCartDraft/getCartDraft round-trips a cart's lines",
+  );
+  await clearCartDraft();
+  const clearedDraft = await getCartDraft();
+  assert(clearedDraft.length === 0, "clearCartDraft empties the persisted draft");
+
   console.log("\nAll smoke tests passed.");
 
-  // 10. Offline + PWA (PHASE 8) — intentionally NOT covered here.
+  // 13. Offline + PWA (PHASE 8) — intentionally NOT covered here.
   // public/sw.js, src/pwa/registerServiceWorker.ts, and
   // src/hooks/useOnlineStatus.ts/useServiceWorkerUpdate.ts are all
   // browser-API surface (ServiceWorkerContainer, CacheStorage,
@@ -442,6 +500,22 @@ async function main() {
   // exercised by a tsx script at all. This is a manual click-through
   // item (see HANDOFF.md "Testing Status"): load the app once online,
   // then go offline and confirm it still loads.
+  //
+  // Also NOT covered here (PHASE 10): the real DB_VERSION 2 -> 3 upgrade
+  // path that backfills `isCash` onto payment methods created before it
+  // existed (database/db.ts's upgrade()). Every DB this script opens
+  // starts fresh at version 3 (oldVersion 0), so that backfill branch
+  // never actually runs above — it was verified by code review only.
+  // Exercising a genuine 2 -> 3 upgrade would need a second, separate
+  // raw-indexedDB harness that manually creates a v2 database BEFORE
+  // this file's very first getDB() call, which conflicts with how every
+  // other section here already shares one v3 database end to end. Left
+  // as a manual QA item: on a device with real Phase-9-or-earlier data,
+  // confirm existing payment methods keep working as expected after
+  // upgrading. Likewise not covered: PosPage.tsx's own cart-hydrate-on-
+  // mount/persist-on-change wiring (React component, not pure logic) —
+  // only the cartDraftService functions it calls are tested in section
+  // 12 above.
 }
 
 main().catch((err) => {

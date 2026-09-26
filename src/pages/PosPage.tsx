@@ -6,6 +6,7 @@ import { LoadingState } from "../components/LoadingState";
 import { Modal } from "../components/Modal";
 import { CoffeeIcon } from "../components/Icon";
 import { listCategories } from "../services/categoriesService";
+import { clearCartDraft, getCartDraft, saveCartDraft } from "../services/cartDraftService";
 import { listPaymentMethods } from "../services/paymentMethodsService";
 import { listProducts } from "../services/productsService";
 import { getSettings } from "../services/settingsService";
@@ -24,6 +25,10 @@ export function PosPage() {
   const [cartSheetOpen, setCartSheetOpen] = useState(false);
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Guards the cart-persistence effect below so it never fires (and
+  // overwrites the persisted draft with an empty cart) before the draft
+  // below has actually had a chance to load — see that effect's comment.
+  const [cartHydrated, setCartHydrated] = useState(false);
 
   const cart = useCart();
 
@@ -46,6 +51,24 @@ export function PosPage() {
         if (!cancelled) {
           setError(err instanceof Error ? err.message : "Could not load the product catalog");
         }
+        return;
+      }
+
+      // Restore an unfinished cart left over from before a refresh, an
+      // accidental tab close, or the app simply being reopened later.
+      // Deliberately kept out of the Promise.all/try above and given its
+      // own try/catch: a problem reading the draft should never block
+      // the product catalog from loading — worst case the cart just
+      // starts empty, same as any first-ever visit.
+      try {
+        const draftLines = await getCartDraft();
+        if (!cancelled && draftLines.length > 0) {
+          cart.restore(draftLines);
+        }
+      } catch {
+        // Non-fatal — start with an empty cart.
+      } finally {
+        if (!cancelled) setCartHydrated(true);
       }
     }
     void load();
@@ -53,6 +76,24 @@ export function PosPage() {
       cancelled = true;
     };
   }, []);
+
+  // Mirrors the live cart to IndexedDB on every change, so it survives a
+  // refresh/reopen. Gated on cartHydrated so this can never fire with an
+  // empty initial cart before the effect above has had a chance to
+  // restore a previously-persisted draft (which would otherwise wipe it
+  // out on every fresh page load, including one that just restored it).
+  // A cleared cart (checkout success, or an explicit "Clear cart") is
+  // exactly the empty-lines case here, so it's handled the same way —
+  // completed sales/history are untouched, this only ever writes to the
+  // separate `cartDraft` store.
+  useEffect(() => {
+    if (!cartHydrated) return;
+    if (cart.lines.length === 0) {
+      void clearCartDraft();
+    } else {
+      void saveCartDraft(cart.lines);
+    }
+  }, [cart.lines, cartHydrated]);
 
   // A product whose category has been deactivated is filtered out of the
   // POS grid, same as an inactive product — its stored data is untouched.

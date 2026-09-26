@@ -59,6 +59,7 @@ export function PaymentMethodsManager() {
               <div className="list-row__main">
                 <div className="list-row__title">
                   {method.name}
+                  {method.isCash && <span className="badge badge--payment"> Cash</span>}
                   {!method.active && <span className="badge badge--inactive"> Inactive</span>}
                 </div>
               </div>
@@ -117,6 +118,7 @@ function PaymentMethodFormModal({
 }) {
   const [name, setName] = useState(method?.name ?? "");
   const [active, setActive] = useState(method?.active ?? true);
+  const [isCash, setIsCash] = useState(method?.isCash ?? false);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
@@ -129,9 +131,9 @@ function PaymentMethodFormModal({
     setFormError(null);
     try {
       if (method) {
-        await updatePaymentMethod(method.id, { name: name.trim(), active });
+        await updatePaymentMethod(method.id, { name: name.trim(), active, isCash });
       } else {
-        await addPaymentMethod({ name: name.trim() });
+        await addPaymentMethod({ name: name.trim(), isCash });
       }
       onSaved();
     } catch (err) {
@@ -155,6 +157,26 @@ function PaymentMethodFormModal({
           placeholder="e.g. GCash"
           autoFocus
         />
+      </div>
+
+      {/* PHASE 10: replaces the old implicit "name must be exactly Cash"
+          behavior — see CheckoutModal.tsx. Shown for both new and
+          existing methods (unlike "Available at checkout" below, which
+          only makes sense once a method already exists). */}
+      <div className="field">
+        <div className="toggle-row">
+          <span className="field__label">Accepts cash payments</span>
+          <input
+            type="checkbox"
+            checked={isCash}
+            onChange={(e) => setIsCash(e.target.checked)}
+            style={{ width: 20, height: 20 }}
+          />
+        </div>
+        <span className="field__hint">
+          Turning this on shows the cash-received and change fields at checkout when this
+          method is selected.
+        </span>
       </div>
 
       {method && (

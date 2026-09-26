@@ -21,7 +21,7 @@
 // file, so `activate` evicts the old cache. This is a manual step —
 // there is no automatic content-hash-based cache busting without adding
 // a build plugin. See HANDOFF.md for this trade-off.
-const CACHE_VERSION = "v3";
+const CACHE_VERSION = "v4";
 const CACHE_NAME = `bon-and-bean-shell-${CACHE_VERSION}`;
 
 // URLs known at author time (unhashed, stable paths), precached on
