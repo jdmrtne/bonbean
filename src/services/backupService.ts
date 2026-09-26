@@ -7,9 +7,10 @@
 // file is deliberately the only place that imports both utils/backup.ts
 // AND database/db.ts — same separation reportStats.ts/salesExport.ts keep
 // from their own "pure logic vs. IndexedDB" halves.
-import { getDB, SETTINGS_KEY } from "../database/db";
-import type { PaymentMethod, Settings } from "../types";
+import { getDB, ORDER_SEQUENCE_KEY, SETTINGS_KEY } from "../database/db";
+import type { PaymentMethod, Sale, Settings } from "../types";
 import { BACKUP_FORMAT_VERSION, type BackupFile } from "../utils/backup";
+import { formatOrderNumber, parseOrderNumber } from "../utils/orderNumber";
 
 const FALLBACK_SETTINGS: Settings = { businessName: "My bon&bean", currency: "₱" };
 
@@ -87,11 +88,37 @@ export async function restoreBackup(payload: BackupFile): Promise<void> {
     "sales",
     "saleItems",
     "settings",
+    "orderSequence",
   ] as const;
 
   const tx = db.transaction(storeNames, "readwrite");
 
   await Promise.all(storeNames.map((name) => tx.objectStore(name).clear()));
+
+  // PHASE 11 — Order IDs: a backup taken before orderNumber existed
+  // won't have it on its sales at all; backfill oldest-first, same rule
+  // as database/db.ts's v4 migration, so restoring an old backup behaves
+  // identically to upgrading an old database. A backup that already has
+  // orderNumber (current format) keeps its exact numbers, so restoring
+  // the SAME backup twice never renumbers anything.
+  const sortedSales = [...payload.sales].sort((a, b) => {
+    if (a.date !== b.date) return a.date.localeCompare(b.date);
+    if (a.time !== b.time) return a.time.localeCompare(b.time);
+    return a.createdAt.localeCompare(b.createdAt);
+  });
+  let backfillSequence = 0;
+  let highestSequence = 0;
+  const salesToRestore: Sale[] = sortedSales.map((sale) => {
+    backfillSequence += 1;
+    if (sale.orderNumber) {
+      const parsed = parseOrderNumber(sale.orderNumber);
+      if (parsed !== null) highestSequence = Math.max(highestSequence, parsed);
+      return sale;
+    }
+    const orderNumber = formatOrderNumber(backfillSequence);
+    highestSequence = Math.max(highestSequence, backfillSequence);
+    return { ...sale, orderNumber };
+  });
 
   await Promise.all([
     ...payload.products.map((p) => tx.objectStore("products").put(p)),
@@ -115,9 +142,14 @@ export async function restoreBackup(payload: BackupFile): Promise<void> {
             : m.name.trim().toLowerCase() === "cash",
       }),
     ),
-    ...payload.sales.map((s) => tx.objectStore("sales").put(s)),
+    ...salesToRestore.map((s) => tx.objectStore("sales").put(s)),
     ...payload.saleItems.map((i) => tx.objectStore("saleItems").put(i)),
     tx.objectStore("settings").put(payload.settings, SETTINGS_KEY),
+    // Resync the Order ID sequence counter to the highest order number
+    // actually restored, so the next sale recorded after a restore can
+    // never collide with (or fall behind) a restored order's ID — see
+    // ORDER_SEQUENCE_KEY's comment in database/db.ts.
+    tx.objectStore("orderSequence").put(highestSequence, ORDER_SEQUENCE_KEY),
   ]);
 
   await tx.done;

@@ -16,6 +16,11 @@ import { escapeCsvField, rowsToCsv } from "./csv";
 export interface TransactionLineRow {
   date: string;
   time: string;
+  // PHASE 11: the sale's short, human-friendly Order ID (e.g.
+  // "ORD-0001" — see types/index.ts's Sale.orderNumber), NOT the
+  // internal UUID `id`. Field name kept as `saleId` for backward
+  // compatibility with existing callers/tests; it always holds the
+  // order number now.
   saleId: string;
   paymentMethod: string;
   productName: string;
@@ -49,7 +54,7 @@ export function buildTransactionLineRows(sales: Sale[]): TransactionLineRow[] {
       rows.push({
         date: sale.date,
         time: sale.time,
-        saleId: sale.id,
+        saleId: sale.orderNumber,
         paymentMethod: sale.paymentMethod,
         productName: item.productNameSnapshot,
         unitPrice: item.unitPriceSnapshot,
@@ -66,13 +71,13 @@ export function buildTransactionLineRows(sales: Sale[]): TransactionLineRow[] {
 const TRANSACTION_CSV_HEADERS = [
   "Date",
   "Time",
-  "Sale ID",
+  "Order ID",
   "Payment method",
   "Product",
   "Unit price",
   "Quantity",
   "Line total",
-  "Sale total",
+  "Order total",
   "Notes",
 ];
 
@@ -95,6 +100,111 @@ export function transactionRowsToCsv(rows: TransactionLineRow[]): string {
     r.notes,
   ]);
   return rowsToCsv(TRANSACTION_CSV_HEADERS, dataRows);
+}
+
+// PHASE 11 — Orders Summary: one row per SALE (not per item), the
+// complement to buildTransactionLineRows' one-row-per-item shape. This is
+// what makes "one completed sale = one Order ID" obvious at a glance in
+// the export — a multi-product order that produces several rows above
+// collapses back down to a single row here, with its own item/quantity
+// counts and payment details, never double-counted.
+export interface OrderSummaryRow {
+  orderId: string;
+  date: string;
+  time: string;
+  itemCount: number;
+  totalQty: number;
+  paymentMethod: string;
+  amountReceived: number | null;
+  change: number | null;
+  orderTotal: number;
+}
+
+export function buildOrderSummaryRows(sales: Sale[]): OrderSummaryRow[] {
+  return sales.map((sale) => ({
+    orderId: sale.orderNumber,
+    date: sale.date,
+    time: sale.time,
+    itemCount: sale.items.length,
+    totalQty: sale.items.reduce((sum, item) => sum + item.quantity, 0),
+    paymentMethod: sale.paymentMethod,
+    amountReceived: sale.amountReceived ?? null,
+    change: sale.change ?? null,
+    orderTotal: sale.total,
+  }));
+}
+
+const ORDER_SUMMARY_CSV_HEADERS = [
+  "Order ID",
+  "Date",
+  "Time",
+  "Items",
+  "Total qty",
+  "Payment method",
+  "Amount received",
+  "Change",
+  "Order total",
+];
+
+function orderSummaryRowToCsvRow(r: OrderSummaryRow): (string | number)[] {
+  return [
+    r.orderId,
+    r.date,
+    r.time,
+    r.itemCount,
+    r.totalQty,
+    r.paymentMethod,
+    r.amountReceived !== null ? r.amountReceived.toFixed(2) : "",
+    r.change !== null ? r.change.toFixed(2) : "",
+    r.orderTotal.toFixed(2),
+  ];
+}
+
+// Sum of every completed order's total, counted exactly once per Order
+// ID — `sales` already holds one record per completed sale (not per line
+// item, unlike TransactionLineRow above), so this is a plain sum with no
+// grouping needed and no risk of a multi-product order being added twice.
+// There is no cancelled/failed/incomplete sale state in this app (every
+// record in the `sales` store is a completed transaction — see
+// salesService.ts), so nothing needs to be filtered out here; if that
+// ever changes, filter `sales` before calling this, the same way the
+// caller already filters by date range.
+export function computeOverallTotal(sales: Sale[]): number {
+  return sales.reduce((sum, sale) => sum + sale.total, 0);
+}
+
+export function orderSummaryRowsToCsv(sales: Sale[]): string {
+  const rows = buildOrderSummaryRows(sales).map(orderSummaryRowToCsvRow);
+  const overallTotal = computeOverallTotal(sales);
+  const columnCount = ORDER_SUMMARY_CSV_HEADERS.length;
+
+  // A dash separator row, then the OVERALL TOTAL row itself with the
+  // label and amount in their own cells (nothing else on the row) — the
+  // clearest a plain CSV can make a total row stand out from the order
+  // rows above it, short of real spreadsheet bold formatting.
+  const separatorRow = Array(columnCount).fill("---");
+  const overallRow = Array(columnCount).fill("");
+  overallRow[columnCount - 2] = "OVERALL TOTAL";
+  overallRow[columnCount - 1] = overallTotal.toFixed(2);
+
+  return rowsToCsv(ORDER_SUMMARY_CSV_HEADERS, [...rows, separatorRow, overallRow]);
+}
+
+// PHASE 11: the full sales report — Order Items (one row per line item,
+// grouped and kept together by Order ID) followed by an Orders Summary
+// (one row per order, ending in an OVERALL TOTAL row) — as two sections
+// in a single CSV file. Kept as one file rather than two downloads so an
+// owner handing this to a bookkeeper only has one thing to send; a real
+// multi-sheet Excel workbook would separate these onto their own tabs,
+// but this project deliberately stays CSV-only rather than adding a
+// spreadsheet-writing dependency (see this file's header comment and
+// utils/csv.ts's).
+export function buildSalesReportCsv(sales: Sale[]): string {
+  const itemRows = buildTransactionLineRows(sales);
+  const itemsCsv = transactionRowsToCsv(itemRows);
+  const summaryCsv = orderSummaryRowsToCsv(sales);
+
+  return ["Order Items", itemsCsv, "", "Orders Summary", summaryCsv].join("\r\n");
 }
 
 // Shared filename convention for both the CSV and (future) print/PDF

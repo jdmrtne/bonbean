@@ -27,7 +27,7 @@ import {
   topProductsByRevenue,
   type DateRangePreset,
 } from "../utils/reportStats";
-import { buildExportFilename, buildTransactionLineRows, transactionRowsToCsv } from "../utils/salesExport";
+import { buildExportFilename, buildSalesReportCsv } from "../utils/salesExport";
 
 const TOP_PRODUCTS_LIMIT = 5;
 
@@ -114,13 +114,14 @@ export function ReportsPage() {
       ? formatDateLabel(range.start)
       : `${formatDateLabel(range.start)} – ${formatDateLabel(range.end)}`;
 
-  // PHASE 6 — CSV export: one row per line item across the selected
-  // range (see utils/salesExport.ts for why one-row-per-item rather than
-  // one-row-per-sale). Built from the same rangeSales the on-screen stats
-  // already use, so the export can never disagree with what's on screen.
+  // PHASE 6/11 — CSV export: an "Order Items" section (one row per line
+  // item, grouped by Order ID) plus an "Orders Summary" section (one row
+  // per order, ending in an OVERALL TOTAL row) — see utils/salesExport.ts.
+  // Built from the same rangeSales the on-screen stats already use, so
+  // the export's OVERALL TOTAL can never disagree with the "Total sales"
+  // stat card above.
   function handleDownloadCsv() {
-    const rows = buildTransactionLineRows(rangeSales);
-    const csv = transactionRowsToCsv(rows);
+    const csv = buildSalesReportCsv(rangeSales);
     downloadTextFile(buildExportFilename(range, "csv"), csv, "text/csv;charset=utf-8;");
   }
 

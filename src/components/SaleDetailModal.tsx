@@ -74,7 +74,7 @@ export function SaleDetailModal({
   }
 
   return (
-    <Modal title="Sale details" onClose={onClose}>
+    <Modal title={`Order ${sale.orderNumber}`} onClose={onClose}>
       <div className="sale-detail__meta">
         <span>{formatTimestamp(sale.createdAt)}</span>
         <span className="badge badge--payment">{sale.paymentMethod}</span>

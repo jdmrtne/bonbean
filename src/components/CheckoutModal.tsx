@@ -30,7 +30,11 @@ export function CheckoutModal({
   const [cashReceived, setCashReceived] = useState("");
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
-  const [savedSale, setSavedSale] = useState<{ total: number; change?: number } | null>(null);
+  const [savedSale, setSavedSale] = useState<{
+    orderNumber: string;
+    total: number;
+    change?: number;
+  } | null>(null);
 
   const selectedMethod = paymentMethods.find((m) => m.id === selectedMethodId);
   // PHASE 10: cash handling now depends on the payment method's own
@@ -81,7 +85,7 @@ export function CheckoutModal({
         amountReceived,
         change,
       });
-      setSavedSale({ total: sale.total, change: sale.change });
+      setSavedSale({ orderNumber: sale.orderNumber, total: sale.total, change: sale.change });
     } catch (err) {
       setFormError(err instanceof Error ? err.message : "Could not save the sale");
     } finally {
@@ -101,6 +105,7 @@ export function CheckoutModal({
           <div className="checkout-confirm__icon" aria-hidden="true">
             <CheckCircleIcon size={30} />
           </div>
+          <div className="checkout-confirm__order-id">{savedSale.orderNumber}</div>
           <div className="checkout-confirm__total">
             {formatMoney(savedSale.total, currency)}
           </div>

@@ -65,16 +65,20 @@ export function HistoryPage() {
     return { ...stats, topProducts };
   }, [todaysSales]);
 
-  // Search matches product names within a sale's line items — the
-  // simplest useful filter ("did I sell any croissants today"). Full
-  // date-range filtering is Phase 5 Reports' job; this list is already
-  // sorted most-recent-first so scrolling covers the rest for now.
+  // Search matches product names within a sale's line items, or the
+  // sale's own Order ID (PHASE 11 — "ORD-0001") — the simplest useful
+  // filter ("did I sell any croissants today", "find order ORD-0042").
+  // Full date-range filtering is Phase 5 Reports' job; this list is
+  // already sorted most-recent-first so scrolling covers the rest for
+  // now.
   const filteredSales = useMemo(() => {
     const all = sales ?? [];
     const query = search.trim().toLowerCase();
     if (!query) return all;
-    return all.filter((sale) =>
-      sale.items.some((item) => item.productNameSnapshot.toLowerCase().includes(query)),
+    return all.filter(
+      (sale) =>
+        sale.orderNumber.toLowerCase().includes(query) ||
+        sale.items.some((item) => item.productNameSnapshot.toLowerCase().includes(query)),
     );
   }, [sales, search]);
 
@@ -154,8 +158,8 @@ export function HistoryPage() {
           type="search"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search by product name…"
-          aria-label="Search sales by product name"
+          placeholder="Search by product name or Order ID…"
+          aria-label="Search sales by product name or Order ID"
         />
       </div>
 
@@ -179,7 +183,9 @@ export function HistoryPage() {
               onClick={() => setSelectedSale(sale)}
             >
               <div className="list-row__main">
-                <div className="list-row__title">{formatSaleDate(sale)}</div>
+                <div className="list-row__title">
+                  {sale.orderNumber} · {formatSaleDate(sale)}
+                </div>
                 <div className="list-row__subtitle">
                   {sale.paymentMethod} · {sale.items.length}{" "}
                   {sale.items.length === 1 ? "item" : "items"}

@@ -850,6 +850,12 @@ button.list-row:hover {
   color: var(--color-success);
 }
 
+.checkout-confirm__order-id {
+  font: var(--text-heading);
+  color: var(--color-ink-soft);
+  letter-spacing: 0.02em;
+}
+
 .checkout-confirm__total {
   font: var(--text-price-lg);
   color: var(--color-accent-strong);

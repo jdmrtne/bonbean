@@ -23,11 +23,19 @@ import type {
   Settings,
 } from "../types";
 import { generateId } from "../utils/id";
+import { formatOrderNumber, parseOrderNumber } from "../utils/orderNumber";
 
 export const DB_NAME = "coffee-cart-pos";
-export const DB_VERSION = 3;
+export const DB_VERSION = 4;
 
 export const SETTINGS_KEY = "app";
+
+// PHASE 11: single persisted counter backing Sale.orderNumber (see
+// types/index.ts). Keyed like `settings`/`cartDraft` — one fixed key,
+// there is only ever one running sequence per device. The stored value
+// is the highest order sequence number already issued; the next sale
+// gets stored+1 (see services/salesService.ts's recordSale).
+export const ORDER_SEQUENCE_KEY = "orderSequence";
 
 interface CoffeeCartDBSchema extends DBSchema {
   products: {
@@ -66,6 +74,13 @@ interface CoffeeCartDBSchema extends DBSchema {
   cartDraft: {
     key: string;
     value: CartLine[];
+  };
+  // PHASE 11: the running Order ID sequence counter (see
+  // ORDER_SEQUENCE_KEY above). A single number, not an object — nothing
+  // else needs to live alongside it.
+  orderSequence: {
+    key: string;
+    value: number;
   };
 }
 
@@ -149,6 +164,51 @@ export function getDB(): Promise<IDBPDatabase<CoffeeCartDBSchema>> {
                 });
               }
             }
+          }
+        }
+
+        if (oldVersion < 4) {
+          if (!db.objectStoreNames.contains("orderSequence")) {
+            db.createObjectStore("orderSequence");
+          }
+
+          // Backfill every pre-existing sale with a short, sequential
+          // orderNumber (see types/index.ts's Sale.orderNumber). Assigned
+          // oldest-first so the numbering reads the same way a paper
+          // order pad would have — sale #1 really was the first sale
+          // ever recorded on this device. `id` (the primary key) is never
+          // touched, so nothing that already references it (saleItems,
+          // any external note of an old id) breaks.
+          //
+          // Sort key mirrors salesService.ts's listSales (date, then
+          // time, then createdAt as the final tiebreaker for same-minute
+          // sales), just ascending instead of descending.
+          if (db.objectStoreNames.contains("sales")) {
+            const salesStore = tx.objectStore("sales");
+            const allSales = (await salesStore.getAll()) as Sale[];
+            allSales.sort((a, b) => {
+              if (a.date !== b.date) return a.date.localeCompare(b.date);
+              if (a.time !== b.time) return a.time.localeCompare(b.time);
+              return a.createdAt.localeCompare(b.createdAt);
+            });
+
+            let sequence = 0;
+            for (const sale of allSales) {
+              sequence += 1;
+              if (!sale.orderNumber) {
+                await salesStore.put({ ...sale, orderNumber: formatOrderNumber(sequence) });
+              } else {
+                // Already has one (e.g. re-running an interrupted
+                // upgrade) — trust the highest number actually in use,
+                // not just the row count, so the counter below can never
+                // be set lower than an order number already issued.
+                sequence = Math.max(sequence, parseOrderNumber(sale.orderNumber) ?? sequence);
+              }
+            }
+
+            await tx.objectStore("orderSequence").put(sequence, ORDER_SEQUENCE_KEY);
+          } else {
+            await tx.objectStore("orderSequence").put(0, ORDER_SEQUENCE_KEY);
           }
         }
       },

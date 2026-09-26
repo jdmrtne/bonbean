@@ -48,6 +48,15 @@ export interface SaleItem {
 
 export interface Sale {
   id: string;
+  // PHASE 11: short, human-friendly sequential Order ID (e.g.
+  // "ORD-0001"), assigned once at creation and never regenerated — this
+  // is what's shown to the cashier/owner everywhere (checkout
+  // confirmation, Sales History, Reports, CSV export, Sale details).
+  // `id` above stays as the internal IndexedDB primary key (and
+  // saleItems' foreign key) and is never renamed, so old data and
+  // existing references to it remain valid. See database/db.ts's v4
+  // migration for how every pre-existing sale is backfilled with one.
+  orderNumber: string;
   date: string; // YYYY-MM-DD
   time: string; // HH:mm
   items: SaleItem[];

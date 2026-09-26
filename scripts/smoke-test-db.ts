@@ -24,6 +24,13 @@ async function main() {
     console.log(`ok - ${msg}`);
   };
 
+  // Sales recorded back-to-back in this script can land in the very same
+  // millisecond, unlike a real cashier who takes at least a few seconds
+  // between transactions — listSales' final tiebreaker is each sale's
+  // createdAt timestamp (see salesService.ts), so a tiny delay here keeps
+  // "most recent first" assertions meaningful without touching app code.
+  const tick = () => new Promise((resolve) => setTimeout(resolve, 2));
+
   // 1. DB opens and seeds defaults
   await getDB();
   const methods = await listPaymentMethods();
@@ -78,6 +85,7 @@ async function main() {
   assert(sale.total === 150 * 2 + 85, "sale total is the sum of line totals");
   assert(sale.items.length === 2, "sale has one SaleItem per cart line");
   assert(sale.change === 500 - (150 * 2 + 85), "change = amountReceived - total");
+  assert(sale.orderNumber === "ORD-0001", "first recorded sale gets short Order ID ORD-0001");
 
   const db = await getDB();
   const storedSale = await db.get("sales", sale.id);
@@ -96,19 +104,44 @@ async function main() {
   // 5. Sales history: listSales + deleteSale (PHASE 4)
   const { listSales, deleteSale } = await import("../src/services/salesService");
 
+  await tick();
   const secondSale = await recordSale({
     lines: [{ productId: latte.id, name: "Iced Latte", unitPrice: 150, quantity: 1 }],
     paymentMethod: "GCash",
   });
+  assert(secondSale.orderNumber === "ORD-0002", "Order IDs increment sequentially (ORD-0002)");
+  // PHASE 11 — cashless payments: GCash/Maya/Bank Transfer/Other (every
+  // method with isCash === false) never receives an amountReceived/change
+  // from the caller — recordSale must fill these in automatically rather
+  // than leaving them undefined.
+  assert(
+    secondSale.amountReceived === secondSale.total,
+    "a cashless sale auto-sets amountReceived to the sale total",
+  );
+  assert(secondSale.change === 0, "a cashless sale auto-sets change to 0");
+
+  await tick();
+  const thirdSale = await recordSale({
+    lines: [{ productId: latte.id, name: "Iced Latte", unitPrice: 150, quantity: 1 }],
+    paymentMethod: "Maya",
+  });
+  assert(
+    thirdSale.amountReceived === thirdSale.total && thirdSale.change === 0,
+    "a second cashless payment method (Maya) also auto-sets amountReceived/change",
+  );
+  assert(
+    thirdSale.orderNumber === "ORD-0003" && thirdSale.id !== secondSale.id,
+    "Order IDs keep incrementing and stay unique across sales",
+  );
 
   const allSales = await listSales();
-  assert(allSales.length === 2, "listSales returns both recorded sales");
-  assert(allSales[0].id === secondSale.id, "listSales sorts most-recent-first");
+  assert(allSales.length === 3, "listSales returns all three recorded sales");
+  assert(allSales[0].id === thirdSale.id, "listSales sorts most-recent-first");
 
   await deleteSale(sale.id);
   const afterDelete = await listSales();
-  assert(afterDelete.length === 1, "deleteSale removes exactly one sale");
-  assert(afterDelete[0].id === secondSale.id, "the untouched sale is still present after delete");
+  assert(afterDelete.length === 2, "deleteSale removes exactly one sale");
+  assert(afterDelete[0].id === thirdSale.id, "the untouched sales are still present after delete");
 
   const deletedSaleRecord = await db.get("sales", sale.id);
   assert(deletedSaleRecord === undefined, "deleted sale's record is gone from the sales store");
@@ -306,7 +339,7 @@ async function main() {
   const csvLines = exportCsv.split("\r\n");
   assert(csvLines.length === 3, "transactionRowsToCsv emits one header line plus one line per row");
   assert(
-    csvLines[0] === "Date,Time,Sale ID,Payment method,Product,Unit price,Quantity,Line total,Sale total,Notes",
+    csvLines[0] === "Date,Time,Order ID,Payment method,Product,Unit price,Quantity,Line total,Order total,Notes",
     "transactionRowsToCsv header matches the documented column order",
   );
   assert(csvLines[1].includes('"regular, no sugar"'), "a note containing a comma is quoted in the CSV output");
@@ -323,6 +356,92 @@ async function main() {
     buildExportFilename({ start: "2026-03-01", end: "2026-03-18" }, "csv") ===
       "sales-report_2026-03-01_to_2026-03-18.csv",
     "buildExportFilename spells out a multi-day range",
+  );
+
+  // 8b. Orders Summary + OVERALL TOTAL (PHASE 11)
+  //
+  // buildOrderSummaryRows/computeOverallTotal/buildSalesReportCsv all
+  // take Sale[] directly (same dependency-free discipline as the rest of
+  // this module), so — like multiItemSale above — a second, single-item
+  // fixture sale exercises the "one row per ORDER, never per item" shape
+  // without touching IndexedDB.
+  const { buildOrderSummaryRows, computeOverallTotal, orderSummaryRowsToCsv, buildSalesReportCsv } =
+    await import("../src/utils/salesExport");
+
+  const singleItemSale = {
+    ...secondSale,
+    id: "export-fixture-2",
+    orderNumber: "ORD-0099",
+    date: "2026-03-18",
+    total: 120,
+    paymentMethod: "Cash",
+    amountReceived: 150,
+    change: 30,
+    items: [
+      {
+        ...secondSale.items[0],
+        id: "export-item-3",
+        productNameSnapshot: "Latte",
+        quantity: 1,
+        unitPriceSnapshot: 120,
+        lineTotal: 120,
+      },
+    ],
+  };
+
+  const summaryRows = buildOrderSummaryRows([multiItemSale, singleItemSale]);
+  assert(
+    summaryRows.length === 2,
+    "buildOrderSummaryRows produces exactly one row per ORDER, regardless of item count",
+  );
+  assert(
+    summaryRows[0].itemCount === 2 && summaryRows[0].totalQty === 2,
+    "a multi-product order's summary row reports its own item/qty counts, not per-item duplicates",
+  );
+  assert(
+    summaryRows[0].orderTotal === 235 && summaryRows[1].orderTotal === 120,
+    "each order's summary row carries its own order total exactly once",
+  );
+
+  const overallTotal = computeOverallTotal([multiItemSale, singleItemSale]);
+  assert(
+    overallTotal === 235 + 120,
+    "computeOverallTotal sums every order's total exactly once (no per-item double-counting)",
+  );
+  assert(
+    computeOverallTotal([multiItemSale]) === 235,
+    "computeOverallTotal on a single order equals that order's own total",
+  );
+
+  const summaryCsv = orderSummaryRowsToCsv([multiItemSale, singleItemSale]);
+  const summaryCsvLines = summaryCsv.split("\r\n");
+  assert(
+    summaryCsvLines[0] ===
+      "Order ID,Date,Time,Items,Total qty,Payment method,Amount received,Change,Order total",
+    "orderSummaryRowsToCsv header matches the documented Orders Summary columns",
+  );
+  assert(
+    summaryCsvLines.length === 1 + 2 + 2,
+    "orderSummaryRowsToCsv emits: header + one row per order + a separator row + an OVERALL TOTAL row",
+  );
+  const overallTotalLine = summaryCsvLines[summaryCsvLines.length - 1];
+  assert(
+    overallTotalLine.includes("OVERALL TOTAL") && overallTotalLine.includes((235 + 120).toFixed(2)),
+    "the last row is a clearly labeled OVERALL TOTAL row carrying the summed total",
+  );
+  assert(
+    summaryCsvLines[summaryCsvLines.length - 2].split(",").every((cell) => cell === "---"),
+    "a separator row visually sets the OVERALL TOTAL row apart from ordinary order rows",
+  );
+
+  const fullReportCsv = buildSalesReportCsv([multiItemSale, singleItemSale]);
+  assert(
+    fullReportCsv.includes("Order Items") && fullReportCsv.includes("Orders Summary"),
+    "buildSalesReportCsv includes both the Order Items and Orders Summary sections",
+  );
+  assert(
+    fullReportCsv.indexOf("Order Items") < fullReportCsv.indexOf("Orders Summary"),
+    "the Order Items section comes before the Orders Summary section",
   );
 
   // 9. Backup + Restore (PHASE 7)
@@ -377,7 +496,7 @@ async function main() {
   );
 
   assert(
-    buildBackupFilename(new Date(2026, 2, 18)) === "coffee-cart-backup_2026-03-18.json",
+    buildBackupFilename(new Date(2026, 2, 18)) === "bon-and-bean-backup_2026-03-18.json",
     "buildBackupFilename uses the date-stamped naming convention",
   );
 
@@ -425,6 +544,32 @@ async function main() {
   assert(
     restoredSecondSale?.items[0]?.unitPriceSnapshot === secondSale.items[0].unitPriceSnapshot,
     "restoreBackup writes SaleItem price snapshots back exactly as backed up, not recomputed",
+  );
+  assert(
+    restoredSecondSale?.orderNumber === secondSale.orderNumber,
+    "restoreBackup preserves a restored sale's existing Order ID exactly",
+  );
+
+  // PHASE 11 — Order ID sequence resync: after restoring a backup whose
+  // highest restored Order ID is ORD-0003 (secondSale=ORD-0002,
+  // thirdSale=ORD-0003 — `sale`/ORD-0001 was deleted before this backup
+  // was taken), the very next sale recorded must continue from there
+  // (ORD-0004), never collide with a restored order, and never regress
+  // to an old count from before the restore.
+  await tick();
+  const saleAfterRestore = await recordSale({
+    lines: [{ productId: latte.id, name: "Iced Latte", unitPrice: 150, quantity: 1 }],
+    paymentMethod: "Cash",
+    amountReceived: 150,
+    change: 0,
+  });
+  assert(
+    saleAfterRestore.orderNumber === "ORD-0004",
+    "the Order ID sequence resyncs on restore and continues from the highest restored order number",
+  );
+  assert(
+    !salesAfterRestore.some((s) => s.orderNumber === saleAfterRestore.orderNumber),
+    "the post-restore sale's Order ID never collides with a restored sale's Order ID",
   );
 
   const settingsAfterRestore = await getSettings();
@@ -516,6 +661,18 @@ async function main() {
   // mount/persist-on-change wiring (React component, not pure logic) —
   // only the cartDraftService functions it calls are tested in section
   // 12 above.
+  //
+  // Also NOT covered here (PHASE 11): the real DB_VERSION 3 -> 4 upgrade
+  // path that backfills `orderNumber` onto sales created before it
+  // existed (database/db.ts's upgrade(), oldVersion < 4 branch). Every
+  // DB this script opens starts fresh at version 4, so every sale
+  // recorded above already goes through recordSale's own orderNumber
+  // assignment (exercised throughout section 4/5) rather than that
+  // migration's backfill loop. Left as a manual QA item, same as the
+  // 2 -> 3 upgrade above: on a device with real pre-Phase-11 data,
+  // confirm every existing sale gets a sensible, uniquely-numbered
+  // ORD-#### after upgrading, and that a newly recorded sale continues
+  // the sequence rather than restarting it.
 }
 
 main().catch((err) => {

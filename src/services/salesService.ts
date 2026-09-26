@@ -5,10 +5,11 @@
 // moment of sale — never re-read from the live Product record — so a later
 // price or name change on the product never rewrites history. This is the
 // master spec's core data rule; see HANDOFF.md "DO NOT CHANGE".
-import { getDB } from "../database/db";
+import { getDB, ORDER_SEQUENCE_KEY } from "../database/db";
 import type { CartLine, Sale, SaleItem } from "../types";
 import { generateId } from "../utils/id";
 import { formatDateKey } from "../utils/date";
+import { formatOrderNumber } from "../utils/orderNumber";
 
 // Re-exported for backward compatibility — HistoryPage.tsx (PHASE 4) and
 // others import formatDateKey from this module. The implementation now
@@ -46,15 +47,38 @@ export async function recordSale(input: RecordSaleInput): Promise<Sale> {
 
   const total = items.reduce((sum, item) => sum + item.lineTotal, 0);
 
+  // PHASE 11 — cashless payments: the caller (CheckoutModal) only passes
+  // amountReceived/change for a cash-accepting method; for every other
+  // payment method (isCash === false — GCash, Maya, Bank Transfer,
+  // Other, or any custom method added later) it deliberately omits them,
+  // since there's nothing for the cashier to type. Enforced here, not
+  // just trusted from the caller, so this holds no matter what calls
+  // recordSale: the amount received on a cashless sale is always exactly
+  // the total, and change is always zero.
+  const amountReceived = input.amountReceived ?? total;
+  const change = input.change ?? 0;
+
+  // PHASE 11 — short Order IDs: the sequence counter and the sale (plus
+  // its items) are all written in ONE transaction below, so two sales
+  // completed back-to-back can never read the same counter value — see
+  // database/db.ts's ORDER_SEQUENCE_KEY. `id` (the primary key) stays a
+  // UUID, unrelated to this — orderNumber is a separate, purely cosmetic
+  // field.
+  const tx = db.transaction(["sales", "saleItems", "orderSequence"], "readwrite");
+  const sequenceStore = tx.objectStore("orderSequence");
+  const previousSequence = (await sequenceStore.get(ORDER_SEQUENCE_KEY)) ?? 0;
+  const sequence = previousSequence + 1;
+
   const sale: Sale = {
     id: saleId,
+    orderNumber: formatOrderNumber(sequence),
     date: formatDateKey(now),
     time: formatTimeKey(now),
     items,
     total,
     paymentMethod: input.paymentMethod,
-    amountReceived: input.amountReceived,
-    change: input.change,
+    amountReceived,
+    change,
     notes: input.notes,
     createdAt: now.toISOString(),
   };
@@ -64,8 +88,8 @@ export async function recordSale(input: RecordSaleInput): Promise<Sale> {
   // flat store makes per-product queries (Phase 4 "Top products", Phase 5
   // product performance) cheap without scanning every sale. Written in one
   // transaction so a sale is never saved with only one of the two present.
-  const tx = db.transaction(["sales", "saleItems"], "readwrite");
   await Promise.all([
+    sequenceStore.put(sequence, ORDER_SEQUENCE_KEY),
     tx.objectStore("sales").add(sale),
     ...items.map((item) => tx.objectStore("saleItems").add(item)),
   ]);
