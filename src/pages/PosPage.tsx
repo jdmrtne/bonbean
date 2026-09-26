@@ -25,6 +25,10 @@ export function PosPage() {
   const [products, setProducts] = useState<Product[] | null>(null);
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
   const [currency, setCurrency] = useState("₱");
+  // PHASE 13: only needed for the Close Register Excel report's header
+  // (see CloseRegisterModal.tsx / utils/registerReportExcel.ts) — nothing
+  // else on this page reads it.
+  const [businessName, setBusinessName] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string>(ALL_CATEGORIES);
   const [cartSheetOpen, setCartSheetOpen] = useState(false);
   const [checkoutOpen, setCheckoutOpen] = useState(false);
@@ -60,6 +64,7 @@ export function PosPage() {
         setProducts(productList);
         setPaymentMethods(methodList);
         setCurrency(settings.currency);
+        setBusinessName(settings.businessName);
         setRegisterSession(openSession);
       } catch (err) {
         if (!cancelled) {
@@ -285,6 +290,7 @@ export function PosPage() {
         <CloseRegisterModal
           session={registerSession}
           currency={currency}
+          businessName={businessName}
           paymentMethods={paymentMethods}
           onClose={() => setCloseRegisterOpen(false)}
           onClosed={() => {

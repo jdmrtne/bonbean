@@ -10,9 +10,8 @@ import { CheckCircleIcon } from "./Icon";
 import { closeRegister } from "../services/registerService";
 import { listSales } from "../services/salesService";
 import type { PaymentMethod, RegisterSession, Sale } from "../types";
-import { downloadTextFile } from "../utils/download";
+import { downloadExcelWorkbook } from "../utils/download";
 import { formatMoney } from "../utils/money";
-import { buildRegisterClosingCsv, buildRegisterClosingFilename } from "../utils/registerExport";
 import {
   computeRegisterClosingSummary,
   filterSalesBySession,
@@ -23,6 +22,10 @@ import { computeSalesStats } from "../utils/reportStats";
 interface CloseRegisterModalProps {
   session: RegisterSession;
   currency: string;
+  // PHASE 13: shows on the Excel closing report's header, same as
+  // ReportsPage.tsx's print header. Optional/defaults to "" so this
+  // component still type-checks anywhere it isn't threaded through yet.
+  businessName?: string;
   paymentMethods: PaymentMethod[];
   onClose: () => void;
   // Called once the register is fully closed AND the cashier has
@@ -33,6 +36,7 @@ interface CloseRegisterModalProps {
 export function CloseRegisterModal({
   session,
   currency,
+  businessName = "",
   paymentMethods,
   onClose,
   onClosed,
@@ -44,6 +48,13 @@ export function CloseRegisterModal({
   const [formError, setFormError] = useState<string | null>(null);
   const [closedSummary, setClosedSummary] = useState<RegisterClosingSummary | null>(null);
   const [closedSession, setClosedSession] = useState<RegisterSession | null>(null);
+  // The shift's sales at the moment of closing — kept alongside
+  // closedSummary/closedSession so "Download closing report" can rebuild
+  // the exact same Excel workbook later without depending on `sales`
+  // (which keeps loading/updating in the background) or `shiftSales`
+  // (memoized off the *current* session, not the one just closed).
+  const [closedShiftSales, setClosedShiftSales] = useState<Sale[]>([]);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -79,6 +90,34 @@ export function CloseRegisterModal({
     [hasValidCash, shiftSales, paymentMethods, session.openingFund, parsedCash],
   );
 
+  async function downloadReport(
+    forSession: RegisterSession,
+    forSummary: RegisterClosingSummary,
+    forShiftSales: Sale[],
+  ) {
+    setDownloadError(null);
+    try {
+      // Dynamically imported so ExcelJS (only needed at register-close
+      // time, and fairly heavy) never lands in the app's main bundle —
+      // see registerReportExcel.ts's header comment.
+      const { buildRegisterReportFilename, buildRegisterReportWorkbook } = await import(
+        "../utils/registerReportExcel"
+      );
+      const workbook = await buildRegisterReportWorkbook({
+        session: forSession,
+        summary: forSummary,
+        shiftSales: forShiftSales,
+        businessName,
+        currency,
+      });
+      await downloadExcelWorkbook(buildRegisterReportFilename(forSession), workbook);
+    } catch (err) {
+      setDownloadError(
+        err instanceof Error ? err.message : "Could not generate the closing report file.",
+      );
+    }
+  }
+
   async function handleClose() {
     if (!hasValidCash) {
       setFormError("Enter the physical cash counted in the drawer.");
@@ -94,13 +133,10 @@ export function CloseRegisterModal({
         session.openingFund,
         parsedCash,
       );
-      downloadTextFile(
-        buildRegisterClosingFilename(updated),
-        buildRegisterClosingCsv(updated, summary),
-        "text/csv;charset=utf-8;",
-      );
+      await downloadReport(updated, summary, shiftSales);
       setClosedSession(updated);
       setClosedSummary(summary);
+      setClosedShiftSales(shiftSales);
     } catch (err) {
       setFormError(err instanceof Error ? err.message : "Could not close the register.");
     } finally {
@@ -110,11 +146,7 @@ export function CloseRegisterModal({
 
   function handleDownloadAgain() {
     if (!closedSession || !closedSummary) return;
-    downloadTextFile(
-      buildRegisterClosingFilename(closedSession),
-      buildRegisterClosingCsv(closedSession, closedSummary),
-      "text/csv;charset=utf-8;",
-    );
+    void downloadReport(closedSession, closedSummary, closedShiftSales);
   }
 
   if (closedSummary) {
@@ -154,6 +186,11 @@ export function CloseRegisterModal({
             </div>
           </div>
 
+          {downloadError && (
+            <div className="banner banner--danger" role="alert">
+              {downloadError}
+            </div>
+          )}
           <Button variant="secondary" block onClick={handleDownloadAgain}>
             Download closing report
           </Button>

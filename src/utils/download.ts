@@ -17,3 +17,24 @@ export function downloadTextFile(filename: string, content: string, mimeType: st
   a.remove();
   URL.revokeObjectURL(url);
 }
+
+// PHASE 13: same object-URL/anchor-click dance as downloadTextFile above,
+// just for an already-built ExcelJS workbook instead of a plain string —
+// used by the register closing report (see utils/registerReportExcel.ts).
+// `workbook.xlsx.writeBuffer()` is the only async step in the whole
+// export path; everything that builds the workbook's rows/formatting is
+// synchronous and DOM-free.
+export async function downloadExcelWorkbook(filename: string, workbook: import("exceljs").Workbook): Promise<void> {
+  const buffer = await workbook.xlsx.writeBuffer();
+  const blob = new Blob([buffer], {
+    type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
