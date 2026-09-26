@@ -2,35 +2,81 @@ Project:
 Coffee Cart POS
 
 Current Phase:
-PHASE 3 — Sales Recording
+PHASE 4 — Sales History + Dashboard
 
 Status:
-COMPLETE (pending real-browser + real-device verification — see "Known bugs")
+COMPLETE — `npm install`, `npx tsc -b`, `npm run build`, `npx oxlint`, and
+`npm run smoke-test` were all actually run this phase (this session had
+working npm registry access, unlike Phases 2–3) and all passed, including
+for the first time verifying Phase 3's sales round-trip / price-snapshot
+smoke test actually works. Manual click-through in a real/headed browser
+on mobile and desktop widths still has NOT been done — no headed browser
+was available in this sandboxed environment — see "Known bugs" below.
 
 Completed:
 
-* New `src/services/salesService.ts` (`recordSale`) — writes a `Sale` record plus one `SaleItem` per cart line in a single IndexedDB transaction, following the same plain-async-function pattern as the other services
-* Price/name snapshots (`productNameSnapshot`, `unitPriceSnapshot`) are copied directly from the cart's `CartLine` at save time, never re-read from the live `Product` — verified in the extended smoke test by changing a product's price after a sale and confirming the saved sale is unaffected
-* New `src/components/CheckoutModal.tsx` — payment method selection (reading active methods via `paymentMethodsService.listPaymentMethods(false)`), a cash-received field + live change calculation shown only for a payment method named "Cash" (case-insensitive), validation that cash received covers the total, and a confirmation screen (total + change due) after saving
-* The Phase 2 "Continue to Payment" placeholder in `CartPanel.tsx` is now a real button — wired to open `CheckoutModal` via a new `onCheckout` prop, supplied by `PosPage.tsx`
-* On successful save, the confirmation screen's "New sale" button clears the cart (`cart.clear()`) and closes the checkout modal, so the next order starts fresh
-* `scripts/smoke-test-db.ts` extended with a sales round-trip test: records a 2-line sale, confirms the sale total/change and that both the embedded `Sale.items` and the flat `saleItems` store hold the two `SaleItem`s, then updates one product's price afterward and confirms the saved `SaleItem`'s `unitPriceSnapshot` is untouched while the live product's price did change
-* Payment method selection is a horizontal button list (not a dropdown), matching the app's touch-first, minimal-typing design direction
-* Confirmed Product Management (Phase 1) and the POS product grid/cart (Phase 2) still work exactly as before — only `CartPanel.tsx` and `PosPage.tsx` were modified this phase; `salesService.ts` and `CheckoutModal.tsx` are new, isolated files
+* `salesService.ts` extended with `listSales()` (all sales, most recent
+  first — sorts by `date` then by `time` string since the `by-date` index
+  only orders by date), `deleteSale(id)` (removes the `Sale` plus every
+  matching `SaleItem` in one transaction), and `updateSaleNotes(id, notes)`
+* New `src/components/SaleDetailModal.tsx` — shows a sale's full line
+  items, payment method, cash received/change if applicable, and
+  timestamp; lets the owner edit/save a free-text note; deletes the sale
+  after a native `window.confirm(...)` (delete is the one destructive,
+  irreversible action in the app so far, and is the only Phase 4 action
+  gated behind a confirmation)
+* `src/pages/HistoryPage.tsx` rebuilt (Phase 0 placeholder replaced):
+  a "Today" dashboard (today's sales total, transaction count, items sold,
+  average sale, payment-method breakdown, top 5 products by quantity sold)
+  above a searchable, most-recent-first list of every recorded sale;
+  tapping a row opens `SaleDetailModal`
+* Search is a simple case-insensitive filter over product names within
+  each sale's line items (e.g. "croissant") — no date-range picker was
+  built here, since that's explicitly Phase 5 Reports' job
+* Editing a transaction was scoped to notes only, deliberately — line
+  items, prices, payment method, and totals stay immutable, since they're
+  a record of what actually happened (same principle as the Phase 3
+  price-snapshot rule)
+* `scripts/smoke-test-db.ts` extended with `listSales`/`deleteSale`
+  round-trip tests: records a second sale, confirms `listSales` returns
+  both in the right order, deletes the first sale, and confirms its
+  `Sale` record and both its `SaleItem`s are gone while the second sale
+  and its items are untouched (no orphaned records)
+* Confirmed Phases 0–3 (product/category/payment-method management, POS
+  grid/cart, sales recording) still build and pass their existing smoke
+  tests unchanged — only `HistoryPage.tsx` was replaced and
+  `salesService.ts`/`components.css` were extended; no other file touched
 
 Current functionality:
 
-* Owner can build an order (Phase 2), tap "Continue to Payment", pick a payment method, enter cash received if paying cash, see the change due, save the sale, see a confirmation with the total and change, and start a fresh empty cart
-* A saved sale is only verifiable by reading IndexedDB directly (e.g. via the smoke test, or the browser's IndexedDB devtools panel) — there is no Sales History screen yet to see it in the UI; that's Phase 4
+* Owner can record a sale on the POS screen (Phases 2–3), then see it
+  immediately in Sales History: full history list, tap for detail, search
+  by product name, delete with confirmation, add/edit a note
+* The dashboard shows real numbers for today the moment a sale is saved —
+  no page reload needed on return, since `HistoryPage` re-fetches on mount
+* Reports (custom date ranges, more detailed product performance) still
+  show the Phase 0 placeholder — that's Phase 5
 
 Known bugs / verification gaps:
 
-* **This phase's code could not be run, built, or lint-checked in this session either** — same network restriction as Phase 2 (`npm install` still returns a 403; re-tried at the start of this phase, no change). No `npm run dev`, `npm run build`, `npx oxlint`, or `npm run smoke-test` could be executed.
-* In place of the above: every new/changed file was syntax-checked with `esbuild`, and the full app (`src/main.tsx`) plus the smoke test script (`scripts/smoke-test-db.ts`) were both bundle-resolved end-to-end (only real npm packages externalized) with 0 errors. This confirms syntax and that every import/export name lines up — it does **not** confirm the extended smoke test's assertions actually pass, since it was never executed against `fake-indexeddb`.
-* **A human must run `npm install && npm run build && npx oxlint && npm run smoke-test`, then click through a full order → payment → save → confirm flow (cash and non-cash) on both a mobile and a desktop width, before this phase is truly done.**
-* "Cash" detection is by matching the payment method's name, case-insensitively, to "cash" — if the owner renames the seeded "Cash" payment method, the cash-received/change fields will stop appearing for it. Documented as a deliberate simplification in HANDOFF.md; a dedicated flag on `PaymentMethod` would be the more robust fix if this matters in practice.
-* No sales history/search/delete yet (Phase 4) — a saved sale has no UI to view it in.
+* **Manual click-through has not been done.** Record several real sales
+  via the POS screen, then check: the history list order and content, the
+  detail modal (including a cash sale and a non-cash sale), search with a
+  real product name, delete with both "confirm" and "cancel" on the native
+  dialog, note editing, and the dashboard numbers against what was
+  actually entered — at both a mobile and a desktop width. This must be
+  done by a human before Phase 4 is truly trusted, per the master spec.
+* `npx oxlint` reports the same pre-existing `react(set-state-in-effect)`
+  style warning on `HistoryPage.tsx`'s `void refresh()` call that already
+  exists on `CategoriesManager.tsx` and `PaymentMethodsManager.tsx` — 0
+  errors, and consistent with the codebase's existing pattern, not a new
+  issue introduced this phase.
+* Top products are ranked by quantity sold, not revenue — a deliberate
+  choice (documented in `HANDOFF.md`); revisit if revenue ranking turns
+  out to matter more in practice or in Phase 5.
+* No date-range picker in the Phase 4 dashboard — scoped to "today" only,
+  by design; Phase 5 (Reports) owns date ranges.
 
 Next phase:
 
-PHASE 4 — Sales History + Dashboard
+PHASE 5 — Reports

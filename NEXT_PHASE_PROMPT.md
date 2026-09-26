@@ -8,29 +8,32 @@ First:
 
 1. Read README.md
 2. Read PROJECT_STATUS.md
-3. Read HANDOFF.md — especially "Testing Status": neither Phase 2 nor
-   Phase 3's code has ever been installed, built, type-checked, or linted
-   (no network egress was available in either of those sessions). Treat
-   both as unverified until you've run the checks in step 6 yourself.
+3. Read HANDOFF.md — especially "Testing Status": Phase 4's automated
+   checks (`tsc -b`, `build`, `oxlint`, `smoke-test`) all actually ran and
+   passed this time. What's still outstanding is manual click-through in a
+   real/headed browser — nobody has clicked through the POS, checkout, or
+   Sales History screens yet. Treat all UI as functionally unverified
+   until you've done this yourself in step 6.
 4. Read this file (NEXT_PHASE_PROMPT.md)
 5. Inspect the existing source code, especially `src/services/salesService.ts`
-   (what a saved `Sale` looks like, and where Phase 3 left a note that
-   sale-reading functions should live in this same file),
-   `src/types/index.ts`'s `Sale`/`SaleItem` types, and
-   `src/pages/HistoryPage.tsx` (the Phase 0 placeholder you're replacing).
-6. Run `npm install && npm run build && npx oxlint && npm run
-   smoke-test`. Fix anything they surface — this will be the first time
-   Phase 3's extended smoke test (the sales round-trip / price-snapshot
-   check) has ever actually been executed. Then run `npm run dev` and
-   manually complete a few full sales through the POS screen (different
-   payment methods, different products/quantities, at least one attempt
-   with insufficient cash to confirm it's blocked) before changing
-   anything — this is real manual QA that hasn't been possible in this
-   sandboxed environment.
+   (`listSales`, `deleteSale`, `formatDateKey` — Reports will likely need a
+   date-range variant of the "today" filtering `HistoryPage.tsx` already
+   does), `src/pages/HistoryPage.tsx` (the dashboard computation you'll
+   probably generalize), and `src/pages/ReportsPage.tsx` (the Phase 0
+   placeholder you're replacing).
+6. Run `npm install && npx tsc -b && npm run build && npx oxlint && npm
+   run smoke-test`. This container should have working npm registry
+   access (it did for Phase 4) — if yours doesn't, say so plainly in your
+   own handoff rather than silently skipping these. Then run `npm run dev`
+   and manually click through: a few full sales on the POS screen (cash
+   and non-cash), the Sales History list/detail/search/delete/notes, and
+   whatever you build for Reports — at both a mobile and a desktop width.
+   This manual pass has not been done for Phases 2, 3, or 4 yet either;
+   doing it now, before adding Reports on top, is worth the time.
 
 Current phase:
 
-PHASE 4
+PHASE 5
 
 Previous phases completed:
 
@@ -38,92 +41,68 @@ PHASE 0 — Project Foundation
 PHASE 1 — Database + Product Management
 PHASE 2 — POS + Cart
 PHASE 3 — Sales Recording
+PHASE 4 — Sales History + Dashboard
 
 Your task is to implement:
 
-## PHASE 4 — SALES HISTORY + DASHBOARD
+## PHASE 5 — REPORTS
 
-Build the Sales History screen in `src/pages/HistoryPage.tsx`, replacing
-its current placeholder, plus the dashboard stats called for in the master
-spec.
+Build out `src/pages/ReportsPage.tsx`, replacing its current placeholder.
 
-### Sales History
+### Date range selection
 
-- **List saved sales, most recent first** — add `listSales()` to
-  `src/services/salesService.ts` (query the `sales` store via its existing
-  `by-date` index; you'll likely also want to sort by `time` within a day,
-  since the index is only on `date`)
-- **Transaction detail view** — tapping a sale shows its full line items
-  (name/quantity/unit price/line total, from the sale's embedded `items`
-  array — no need to re-query `saleItems` for this), payment method, cash
-  received/change if applicable, and timestamp
-- **Search** — decide what's searchable (date range? product name within a
-  sale? transaction id?) and document your choice; a simple text filter
-  over product names in each sale's line items is probably enough for a
-  first pass
-- **Delete a transaction** — add `deleteSale(id)` to `salesService.ts`
-  (must remove both the `sales` record AND its `saleItems` — use a
-  multi-store transaction like `recordSale` does). **This one DOES need a
-  confirmation dialog before deleting** — unlike the reversible
-  deactivate/clear-cart actions in earlier phases, deleting a saved sale
-  is destructive and irreversible, and the master spec's brief explicitly
-  distinguishes this case. A native `window.confirm(...)` is fine for now;
-  a nicer confirm dialog can wait for Phase 9 polish unless it's easy to
-  do now.
-- Editing a transaction is listed in the master spec's Phase 4 section but
-  is vaguer than delete — a minimal option (e.g. editing `notes` only, or
-  skipping edit entirely for this phase and just documenting that as a
-  deferred decision) is acceptable; use your judgment and document what
-  you did.
+- Support at least: Today, Yesterday, Last 7 days, This month, Last month,
+  and a custom range (two date pickers). Decide the UI (segmented control
+  + custom option, or a dropdown) and document your choice.
+- Reuse `salesService.listSales()` and filter client-side by the sale's
+  `date` field for the chosen range — the dataset is small (a small coffee
+  cart's sales), so a full client-side filter is simpler than adding
+  date-range query logic to the service layer. If you find a real
+  performance reason to push filtering into `salesService.ts` instead,
+  document why.
 
-### Dashboard
+### Report contents
 
-Decide where this lives (a section at the top of `HistoryPage`, or its own
-area) and document the choice. Must show, computed from the `sales` you
-just built list access for:
+For the selected range, show:
 
-- Today's sales (total ₱ and count)
-- Transaction count
-- Items sold (sum of all `SaleItem.quantity` across sales in the period
-  shown)
-- Average sale (total ÷ transaction count)
-- Payment method breakdown (total per payment method)
-- Top products (by quantity or by revenue — your call, document which)
+- Sales total and transaction count (same shape as Phase 4's dashboard,
+  but for the chosen range instead of just "today")
+- Payment method breakdown (total per method)
+- Product performance — decide whether this is by quantity, by revenue,
+  or both, and document your choice. (Phase 4's "top products" was
+  quantity-only, scoped to today; consider whether Reports should offer
+  revenue too, since a wider date range makes that comparison more useful
+  than it was for a single day.)
 
-It's fine for this first pass to scope the dashboard to "today" only, with
-a note that date-range selection is Phase 5's job (Reports) — don't build
-a full custom-range picker here if it duplicates what Phase 5 is supposed
-to own; check the original master spec's Phase 5 section (in the very
-first prompt of this project, or ask the project owner if it's not in
-context) before deciding how much range-picking belongs in Phase 4 vs. 5.
+### Relationship to Phase 4's dashboard
+
+Phase 4's `HistoryPage` dashboard already covers "today" — don't duplicate
+that exact view here. If it's useful, `ReportsPage` can reuse the same
+computation logic (consider extracting a shared helper if the "compute
+stats for a set of sales" logic in `HistoryPage.tsx` would otherwise be
+copy-pasted) but Reports' job is the *range selection* Phase 4
+deliberately left out.
 
 Do not break existing functionality: Product Management (Phase 1), the POS
-product grid/cart (Phase 2), sales recording (Phase 3), and the Reports
-placeholder (Phase 0) must keep working exactly as they do now.
+grid/cart (Phase 2), sales recording (Phase 3), and Sales History +
+dashboard (Phase 4) must keep working exactly as they do now.
 
 After completing the phase:
 
-- Extend `scripts/smoke-test-db.ts` with tests for `listSales` and
-  `deleteSale` (record a couple of sales, confirm `listSales` returns them
-  in the right order, delete one, confirm both its `sales` record and its
-  `saleItems` are gone while the other sale is untouched).
-- Test everything manually: record several sales via the POS screen first
-  (you'll need real data to see a real history list), then check the list,
-  detail view, search, delete (with and without confirming), and the
-  dashboard numbers against what you actually entered — at both a mobile
-  and a desktop width.
+- Add smoke-test coverage for any new pure logic you extract (e.g. a
+  date-range filter helper), following the existing pattern in
+  `scripts/smoke-test-db.ts`. A full UI can't be smoke-tested this way —
+  focus on the data/calculation logic, same as Phases 3–4 did.
+- Do the manual click-through described in step 6 above — for Reports
+  specifically, and for Phases 2–4 if that still hasn't happened by the
+  time you pick this up.
 - Run `npx tsc -b`, `npm run build`, `npx oxlint`, and `npm run
-  smoke-test`, and fix anything they flag. (If your session also has no
-  network egress, see HANDOFF.md's Phase 2/3 entries for how to at least
-  syntax/import-check new code with `esbuild` as a partial substitute, and
-  say so plainly in your own handoff rather than claiming untested code
-  passed checks it didn't run through.)
+  smoke-test`, and fix anything they flag.
 - Update `PROJECT_STATUS.md`.
-- Update `HANDOFF.md` (What Has Been Built, Important Files, Database
-  Structure if anything changed, Completed Features, Decisions Already
-  Made, Known Issues, Testing Status).
+- Update `HANDOFF.md` (What Has Been Built, Important Files, Completed
+  Features, Decisions Already Made, Known Issues, Testing Status).
 - Replace this file (`NEXT_PHASE_PROMPT.md`) with instructions for
-  PHASE 5 — Reports.
+  PHASE 6 — Excel + PDF Export.
 
-Do NOT start Phase 5. Stop once Phase 4 is tested and documented, and tell
-the project owner Phase 4 is ready for handoff.
+Do NOT start Phase 6. Stop once Phase 5 is tested and documented, and tell
+the project owner Phase 5 is ready for handoff.

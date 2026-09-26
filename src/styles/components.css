@@ -340,6 +340,124 @@
   margin-bottom: var(--space-4);
 }
 
+/* A .list-row is a <div> everywhere else (products/categories/payment
+   methods, which have separate action buttons inside it) but Phase 4's
+   sales list makes the whole row itself a <button> — this resets the
+   native button chrome so it still looks like a plain list row. */
+button.list-row {
+  width: 100%;
+  border: none;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+}
+
+button.list-row:hover {
+  background: var(--color-surface-sunken);
+}
+
+.list-row__amount {
+  font: var(--text-heading);
+  flex: 0 0 auto;
+  text-align: right;
+}
+
+.badge--payment {
+  background: var(--color-accent-wash);
+  color: var(--color-accent-ink);
+}
+
+/* PHASE 4: Sales History dashboard */
+.dashboard {
+  margin-bottom: var(--space-6);
+}
+
+.dashboard__section-title {
+  font: var(--text-heading);
+  margin-bottom: var(--space-3);
+}
+
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+@media (min-width: 860px) {
+  .stat-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+.stat-card {
+  background: var(--color-surface);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-card);
+  padding: var(--space-4);
+}
+
+.stat-card__value {
+  font: var(--text-price);
+  color: var(--color-accent-strong);
+}
+
+.stat-card__label {
+  font: var(--text-small);
+  color: var(--color-ink-soft);
+  margin-top: var(--space-1);
+}
+
+.breakdown-list,
+.top-products-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.breakdown-row,
+.top-product-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-2) 0;
+  font: var(--text-body);
+}
+
+.breakdown-row + .breakdown-row,
+.top-product-row + .top-product-row {
+  border-top: 1px solid var(--color-line);
+}
+
+.top-product-row__rank {
+  color: var(--color-ink-faint);
+  margin-right: var(--space-2);
+}
+
+.search-bar {
+  margin-bottom: var(--space-4);
+}
+
+/* PHASE 4: Sale detail modal */
+.sale-detail__meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-3);
+  font: var(--text-small);
+  color: var(--color-ink-soft);
+}
+
+.sale-detail__cash-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-1) 0;
+  font: var(--text-small);
+  color: var(--color-ink-soft);
+}
+
 .toggle-row {
   display: flex;
   align-items: center;

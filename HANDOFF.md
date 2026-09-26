@@ -2,7 +2,8 @@
 
 ## Current Phase
 
-PHASE 3 — COMPLETE (code-complete; real-browser/device verification still outstanding — see "Testing Status")
+PHASE 4 — COMPLETE (all automated checks actually run and passing; manual
+browser/device click-through still outstanding — see "Testing Status")
 
 ## Overall Project Progress
 
@@ -10,8 +11,8 @@ PHASE 3 — COMPLETE (code-complete; real-browser/device verification still outs
 PHASE 0  — Project Foundation           — COMPLETE
 PHASE 1  — Database + Product Mgmt      — COMPLETE
 PHASE 2  — POS + Cart                   — COMPLETE (pending human verification)
-PHASE 3  — Sales Recording              — COMPLETE (pending human verification)
-PHASE 4  — Sales History + Dashboard    — NOT STARTED
+PHASE 3  — Sales Recording              — COMPLETE (automated checks passed this phase; pending human click-through)
+PHASE 4  — Sales History + Dashboard    — COMPLETE (automated checks passed; pending human click-through)
 PHASE 5  — Reports                      — NOT STARTED
 PHASE 6  — Excel + PDF Export           — NOT STARTED
 PHASE 7  — Backup + Restore             — NOT STARTED
@@ -20,265 +21,258 @@ PHASE 9  — Polish + Mobile UX           — NOT STARTED
 PHASE 10 — Final QA + Release           — NOT STARTED
 ```
 
+Note on Phases 2–3: this session had working `npm install` access (unlike
+the Phase 3 session, which had none). Re-running the full check suite
+confirmed Phases 1–3's code and existing smoke tests all genuinely pass —
+see "Testing Status" below. That's real signal, but it's still not the
+same as a human clicking through the POS/checkout flow in a real browser,
+which remains undone.
+
 ## What Has Been Built
 
-Everything from Phases 0–2 (app shell, routing, design tokens, IndexedDB
-schema, Product/Category/Payment Method management, the POS product grid
-and cart), **plus**, from Phase 3:
+Everything from Phases 0–3 (app shell, routing, design tokens, IndexedDB
+schema, Product/Category/Payment Method management, the POS grid and
+cart, sales recording with price/name snapshots), **plus**, from Phase 4:
 
-- A new `salesService.ts` that writes a `Sale` + its `SaleItem`s from the
-  cart in one IndexedDB transaction.
-- A new `CheckoutModal.tsx` handling payment method selection, cash
-  received + change calculation, validation, saving, and a confirmation
-  screen.
-- The Phase 2 "Continue to Payment" placeholder button is now wired to
-  this real flow.
-- `scripts/smoke-test-db.ts` extended with a sales round-trip test that
-  specifically verifies the price-snapshot rule (the one thing that can't
-  be checked any other way without a headed browser).
+- `salesService.ts` extended with `listSales()`, `deleteSale(id)`, and
+  `updateSaleNotes(id, notes)` — all reading/writing the same
+  `sales`/`saleItems` stores `recordSale` already uses.
+- New `SaleDetailModal.tsx` — transaction detail view + note editing +
+  confirmed delete.
+- `HistoryPage.tsx` rebuilt: today's dashboard stats + searchable sale
+  list, replacing the Phase 0 placeholder.
+- `scripts/smoke-test-db.ts` extended with a `listSales`/`deleteSale`
+  round-trip section.
+- `components.css` extended with dashboard/stat-card/sale-detail styles,
+  plus a `button.list-row` reset (see "Current Architecture").
 
-Still not built: sales history, dashboard stats, reports, exports,
-backup/restore, offline/PWA support. Those are Phases 4–8, in order.
+Still not built: reports with custom date ranges, Excel/PDF export,
+backup/restore, offline/PWA support. Those are Phases 5–8, in order.
 
 ## Current Architecture
 
-Unchanged from Phases 0–2. Additions this phase:
+Unchanged from Phases 0–3. Additions this phase:
 
-- **`salesService.recordSale(input)`** takes `{ lines: CartLine[],
-  paymentMethod: string, amountReceived?, change?, notes? }` and returns
-  the saved `Sale`. It builds one `SaleItem` per `CartLine`, computing
-  `lineTotal` and the sale's `total` itself — the caller (currently only
-  `CheckoutModal`) never computes totals independently, so there's one
-  source of truth for "what does this sale add up to."
-  - Writes both the embedded `Sale.items` array and the flat `saleItems`
-    store in a single `db.transaction(["sales", "saleItems"], "readwrite")`
-    — mirrors the multi-write transaction pattern already used by
-    `categoriesService.moveCategory`/`paymentMethodsService.movePaymentMethod`,
-    just across two stores instead of two records in one store.
-  - Throws if `lines` is empty — `CheckoutModal` can only be reached from
-    a non-empty cart in the current UI, but the service itself doesn't
-    trust that and guards independently.
-- **`CheckoutModal` reads `paymentMethods` and `currency` as props**
-  (loaded once by `PosPage` alongside categories/products/settings, in the
-  same `Promise.all` as before) rather than fetching them itself — keeps
-  data-loading centralized in the page, consistent with how `PosPage`
-  already handed `currency` down to `CartPanel`.
-- **"Is this payment method cash?" is decided by name match**
-  (`name.trim().toLowerCase() === "cash"`), not a stored flag — see the
-  comment directly above `isCashMethod()` in `CheckoutModal.tsx` for the
-  full reasoning and the known limitation (an owner renaming "Cash" loses
-  the cash-specific fields for it).
-- **Two-screen modal, one component.** `CheckoutModal` renders the
-  payment-selection form until `recordSale` succeeds, then switches to a
-  confirmation screen inside the *same* `<Modal>` mount (via a
-  `savedSale` state flag) rather than closing one modal and opening
-  another — avoids a flash of no-modal between the two steps.
-- **`cart.clear()` happens on the confirmation screen's "New sale"
-  button**, not immediately after `recordSale` resolves — so the owner
-  still sees exactly what they just sold (and the change due) before the
-  cart resets. `PosPage` doesn't need to know this happened; it just gets
-  `onDone()` called, which closes the checkout modal, and the cart being
-  empty naturally hides the floating bar and shows `CartPanel`'s empty
-  state.
+- **`salesService.listSales()`** reads all sales via the `by-date` index,
+  then re-sorts most-recent-first by comparing `date`, then `time`, then
+  (as a final tiebreaker) the full `createdAt` ISO timestamp. The
+  `createdAt` tiebreaker isn't decorative — it fixed a real bug caught by
+  running the smoke test repeatedly (see "Testing Status"): two sales
+  saved within the same minute have equal `date` AND `time` keys, and
+  IndexedDB does not guarantee insertion order for equal index keys, so
+  without a finer tiebreaker the order between such sales was effectively
+  random (the test failed roughly 1 in 8 runs). `createdAt`'s millisecond
+  precision resolves this deterministically with no schema change needed.
+  Display formatting (in `HistoryPage` and `SaleDetailModal`) also uses
+  `createdAt` directly via `toLocaleString`, rather than reassembling
+  `date` + `time`.
+- **`salesService.deleteSale(id)`** mirrors `recordSale`'s multi-store
+  transaction shape: one `db.transaction(["sales", "saleItems"],
+  "readwrite")` that deletes the `Sale` and looks up + deletes every
+  `SaleItem` via the `by-saleId` index, so a sale can never be left with
+  orphaned items (or vice versa).
+- **`salesService.updateSaleNotes(id, notes)`** is a plain `get` + `put`,
+  same pattern as `productsService.updateProduct`. It's the *only* mutable
+  field on a saved `Sale` — see "DO NOT CHANGE" below for why everything
+  else stays frozen.
+- **The whole sales-list row is a `<button className="list-row">`**, not a
+  `<div>` with a nested action button (unlike the products/categories/
+  payment-methods lists, which have per-row actions like move-up/edit
+  alongside the row). A sale only has one tap action (open detail), so
+  making the row itself the button was simpler than adding an inert
+  wrapper + click handler. This needed a small CSS reset
+  (`button.list-row` in `components.css`) to strip native button chrome
+  without touching the existing `.list-row` used elsewhere as a `<div>`.
+- **Delete lives inside `SaleDetailModal`, not in the list row.** The
+  Phase 4 brief calls out that deleting a sale is destructive and
+  irreversible (unlike the reversible deactivate/clear-cart actions in
+  earlier phases) and specifically needs confirmation — putting it behind
+  "tap row → open detail → Delete sale → native confirm" adds a
+  deliberate extra step compared to, say, a swipe-to-delete gesture.
+- **Editing is notes-only.** `SaleDetailModal` has an editable `<textarea>`
+  for `Sale.notes` with its own "Save note" button (only shown once the
+  text actually differs from the saved value); every other field
+  (items/prices/payment method/timestamps/totals) is rendered read-only.
+  The Phase 4 brief explicitly allowed this as the minimal option — see
+  "Decisions Already Made" below for the reasoning.
+- **The dashboard is a section at the top of `HistoryPage`, not a separate
+  route/page.** It's computed with a `useMemo` over the same `sales` list
+  the history section already loaded (filtered to today's `date` key via
+  `salesService.formatDateKey`, now exported for this purpose) — no
+  separate query or service function was needed.
+- **Top products are ranked by quantity sold, not revenue** — see
+  `HistoryPage.tsx`'s comment above the `topProducts` computation.
+  Documented as a judgment call in the Phase 4 brief; revisit in Phase 5
+  if revenue ranking is wanted for reports too.
 
 ## Important Files
 
-Everything in Phases 0–2's handoff still applies. New/changed this phase:
+Everything in Phases 0–3's handoff still applies. New/changed this phase:
 
 `src/services/salesService.ts`
-→ New. `recordSale(input): Promise<Sale>`. See "Current Architecture"
-above. Phase 4 (sales history) will read from the `sales` store directly
-(likely a new `listSales`/`getSale`/`deleteSale` set of functions in this
-same file, following the existing service pattern) — don't move sale-
-reading logic into a different file than sale-writing logic without good
-reason.
+→ Changed (extended, not rewritten). Added `listSales()`, `deleteSale(id)`,
+`updateSaleNotes(id, notes)`. Also changed `formatDateKey` from a private
+`function` to an `export function` so `HistoryPage` can compute "today"'s
+key the same way `recordSale` does — no new date-formatting logic was
+added anywhere else. `recordSale` itself is untouched.
 
-`src/components/CheckoutModal.tsx`
-→ New. Props: `{ cart: UseCartResult; currency: string; paymentMethods:
-PaymentMethod[]; onClose: () => void; onDone: () => void }`. `onClose` is
-"cancel, go back to the order" (cart untouched); `onDone` is "the sale
-flow is finished" (called after the owner dismisses the confirmation
-screen, by which point `cart.clear()` has already run inside this
-component). Phase 4 has no reason to touch this file.
+`src/components/SaleDetailModal.tsx`
+→ New. Props: `{ sale: Sale; currency: string; onClose: () => void;
+onDeleted: () => void; onNotesSaved: (updated: Sale) => void }`. Reuses
+`.cart-line`/`.cart-panel__summary` CSS classes from `CartPanel` for the
+line-item list, rather than inventing parallel styles, since a sale's
+saved items and a cart's live lines render almost identically.
 
-`src/components/CartPanel.tsx`
-→ Changed. Now takes a required `onCheckout: () => void` prop (was: a
-disabled placeholder button with no prop). `PosPage.tsx` supplies
-`openCheckout` to both the desktop and mobile instances of `CartPanel`.
-
-`src/pages/PosPage.tsx`
-→ Changed. Now also loads payment methods (`listPaymentMethods(false)`,
-alongside categories/products/settings in the same `Promise.all`) and
-holds `checkoutOpen` state. `openCheckout()` closes the mobile cart sheet
-first (so the two modals never stack) before opening `CheckoutModal`.
+`src/pages/HistoryPage.tsx`
+→ Rewritten (was the Phase 0 placeholder). Loads `listSales()` +
+`getSettings()` on mount into local state; holds `search` and
+`selectedSale` state; computes the dashboard stats via `useMemo`. Renders
+the dashboard, a search input, the sale list (or an `EmptyState`), and
+`SaleDetailModal` when a sale is selected.
 
 `scripts/smoke-test-db.ts`
-→ Extended with a "4. Sales recording + price/name snapshot independence"
-section: records a 2-line sale (reusing the Phase 1 `latte` product plus a
-new `croissant` product), asserts the sale's total/change and that both
-the embedded and flat item stores got written, then updates the
-croissant's price *after* the sale and asserts the saved `SaleItem` is
-unaffected while the live `Product` did change. This is the only place the
-price-snapshot rule is actually verified this phase (no headed browser was
-available — see "Testing Status").
+→ Extended with a "5. Sales history: listSales + deleteSale" section
+(renumbering the old "5. Settings update" to "6."): records a second sale,
+asserts list order and count, deletes the first sale, and asserts both its
+`Sale` and `SaleItem`s are gone while the second sale's are untouched.
+
+`src/styles/components.css`
+→ Extended (not restructured): a `button.list-row` reset, `.list-row__amount`,
+`.badge--payment`, and a new "PHASE 4" section (`.dashboard*`, `.stat-*`,
+`.breakdown-*`, `.top-product-*`, `.search-bar`, `.sale-detail__*`). No
+existing rules were changed.
 
 ## Database Structure
 
-Unchanged from Phase 1 — `sales`/`saleItems` are now actually written to,
-using exactly the schema Phase 1 built (see Phase 1's original notes,
-still accurate, in the git history of this file if you need the full
-field list). No migration was needed this phase.
+Unchanged from Phase 1 — no migration needed this phase. `listSales` and
+`deleteSale` both operate on the existing `sales`/`saleItems` stores and
+their existing indexes (`by-date`, `by-saleId`).
 
 ## Completed Features
 
-- Payment method selection (button list, not a dropdown)
-- Cash received + live change calculation, shown only for a "Cash"-named
-  payment method; validated against the total before saving
-- Non-cash payment methods save with no `amountReceived`/`change` (treated
-  as paid in full, no change due)
-- Sale + SaleItem(s) saved atomically with price/name snapshots frozen at
-  sale time
-- Confirmation screen (total + change due) → "New sale" clears the cart
-- (Carried from Phases 0–2) product/category/payment-method management,
-  POS product grid + cart, responsive app shell, IndexedDB schema, error
-  boundary
+- Sales history list, most recent first, with search by product name
+- Transaction detail view: line items, payment method, cash/change,
+  timestamp
+- Delete a sale (with native confirm) — removes the `Sale` and all its
+  `SaleItem`s
+- Edit a sale's note (the only mutable field on a saved sale)
+- Dashboard (today only): total sales, transaction count, items sold,
+  average sale, payment-method breakdown, top 5 products by quantity
+- (Carried) product/category/payment-method management, POS grid + cart,
+  sales recording with price/name snapshots, responsive app shell,
+  IndexedDB schema, error boundary
 
 ## Known Issues
 
-- **This phase's code has not been run, built, type-checked, or linted**,
-  for the same reason as Phase 2 — this session's container has no
-  network egress (`npm install` was retried at the start of this phase and
-  still returns a 403 from the npm registry; see "Testing Status" for the
-  exact error). None of `npm run dev`, `npm run build`, `npx tsc -b`,
-  `npx oxlint`, or `npm run smoke-test` could be executed.
-  **Whoever picks up Phase 4 must run all of these — including the
-  extended smoke test, which has never actually been executed — before
-  trusting Phase 3's code.**
-- As a partial substitute: every new/changed file (`salesService.ts`,
-  `CheckoutModal.tsx`, the edits to `CartPanel.tsx`/`PosPage.tsx`, and the
-  extended `smoke-test-db.ts`) was syntax-checked with `esbuild`, and both
-  the full app (from `src/main.tsx`) and the smoke test script (from
-  `scripts/smoke-test-db.ts`) were bundle-resolved end-to-end with only
-  real npm packages externalized — 0 errors either way. This confirms
-  syntax and that import/export names line up; it does **not** confirm the
-  new smoke-test assertions actually pass, or that the types check under
-  `tsc`.
-- Manual click-through (full order → payment → cash received → change →
-  save → confirm → cart empties; try insufficient cash; try each payment
-  method; multi-product/multi-quantity sales) as requested by the Phase 3
-  brief has **not been done** — no headed browser or real device available
-  in this environment.
-- "Cash" is detected by name match, not a stored flag — see "Current
-  Architecture" above.
-- No confirmation dialog before "Clear cart" (carried from Phase 2,
-  unchanged).
-- Cart state is still in-memory only (carried from Phase 2, unchanged).
+- **Manual click-through has not been done** — no headed browser or real
+  device was available in this environment. A human needs to: record
+  several real sales via the POS screen (cash and non-cash, various
+  products/quantities), then check the history list, detail view (both a
+  cash and a non-cash sale), search, delete (confirm and cancel), note
+  editing, and every dashboard number against what was actually entered —
+  at both mobile and desktop widths.
+- Top products ranked by quantity, not revenue (see "Current
+  Architecture" above) — a judgment call, not a bug, but worth confirming
+  it's what the project owner actually wants.
+- Dashboard is "today" only; no custom date range (by design — that's
+  Phase 5).
+- Search only matches product names within a sale, not date, amount, or
+  transaction ID — documented as the deliberate "simple first pass" the
+  Phase 4 brief asked for.
+- (Carried from Phase 3) "Cash" detection is by payment-method name match,
+  not a stored flag.
+- (Carried from Phase 2) No confirmation dialog before "Clear cart".
+- (Carried from Phase 2) Cart state is in-memory only.
 - (Carried from Phase 1) No UI yet for editing `settings`.
-- No sales history/search/delete/dashboard yet — a saved sale can only be
-  inspected via the smoke test or IndexedDB devtools until Phase 4.
 
 ## Decisions Already Made
 
-Carried from Phases 0–2 (still true, don't change without good reason):
+Carried from Phases 0–3 (still true, don't change without good reason):
 IndexedDB over localStorage; `HashRouter`; plain CSS; self-hosted Manrope;
-`SaleItem` snapshot pattern; soft-delete-only; no confirmation dialogs for
-reversible one-tap actions; cart stays in memory, not IndexedDB;
-`CartPanel` shared between desktop/mobile.
+`SaleItem` snapshot pattern; soft-delete-only for products/categories/
+payment methods; no confirmation dialogs for reversible one-tap actions;
+cart stays in memory; cash detection by name match; sale-writing logic
+lives in `salesService.ts`.
 
-New in Phase 3:
+New in Phase 4:
 
-- **Cash detection by name match**, not a `PaymentMethod.isCash` flag —
-  simplest option that correctly handles the seeded default without a
-  schema change. Revisit (add a real flag, migrate `DB_VERSION`) only if
-  an owner actually renames "Cash" and this becomes a real problem — see
-  `CheckoutModal.tsx`'s `isCashMethod()` comment.
-- **Non-cash payment methods require no cash-received input** and are
-  saved as fully paid with no change — i.e. `amountReceived`/`change` are
-  simply `undefined` on the `Sale` for those. This matches how a real
-  coffee cart owner would use GCash/Maya/bank transfer (the exact amount
-  moves, there's no "change").
-- **The service, not the UI, computes `total` and each line's
-  `lineTotal`.** `CheckoutModal` never adds up prices itself — it always
-  reads `cart.total` for display and lets `recordSale` compute the
-  authoritative total that gets saved. Keeps "what a sale actually cost"
-  defined in exactly one place.
-- **One `<Modal>`, two screens (form → confirmation), not two modals.**
-  See "Current Architecture" above.
-- **`cart.clear()` is deferred to the confirmation screen's dismissal**,
-  not called immediately after saving — so the owner sees what they just
-  sold before the cart resets.
-- **Sale-writing logic lives in `salesService.ts`**; Phase 4 should put
-  sale-*reading* logic (list/get/delete) in the same file rather than a
-  separate `salesHistoryService.ts` or similar — one service per store,
-  matching the pattern already set for products/categories/payment
-  methods/settings.
+- **Sale-reading/deleting logic also lives in `salesService.ts`**, per the
+  Phase 3 handoff's own recommendation — one service per store, not a
+  separate `salesHistoryService.ts`.
+- **Editing a transaction is notes-only.** Everything else on a saved sale
+  is immutable, for the same reason the price/name snapshot exists: a
+  sale is a record of what actually happened, and letting an owner
+  "correct" a line item or total after the fact would silently rewrite
+  history exactly like a live price lookup would. If real editing (fixing
+  a mis-entered quantity, say) turns out to be needed, the safer pattern
+  is probably "delete and re-enter" using the delete feature already
+  built, rather than adding item-level editing later — worth raising with
+  the project owner before building it, not assuming it's wanted.
+- **Delete requires `window.confirm`, and only lives in the detail modal**
+  — not a swipe gesture or an inline row button — see "Current
+  Architecture" above.
+- **Dashboard is a section of `HistoryPage`, scoped to "today," computed
+  client-side from the same `listSales()` result the list already needed**
+  — no new service function, no separate route.
+- **Top products ranked by quantity sold, not revenue** — see "Current
+  Architecture" above.
 
 ## DO NOT CHANGE
 
-Everything listed in Phases 0–2's version of this section still applies.
-Additionally, as of Phase 3:
+Everything in Phases 0–3's version of this section still applies
+(especially the price/name snapshot rule — Phase 4 reads sales, it never
+recomputes anything from live product data). Additionally, as of Phase 4:
 
-- The price/name snapshot rule in `salesService.recordSale` — it must
-  always take `productNameSnapshot`/`unitPriceSnapshot` from the
-  `CartLine` it's given, never from a live `productsService` lookup. This
-  is the master spec's core data-integrity rule; breaking it would let a
-  future price change silently rewrite historical sales.
-- The `Sale`/`SaleItem` field names and the fact that both the embedded
-  `Sale.items` array and the flat `saleItems` store are written for every
-  sale — Phase 4's history list and Phase 5's product-performance reports
-  are expected to read from whichever of the two is more convenient for
-  their query, and both assume both are always present and in sync.
-- Don't make `salesService.recordSale` compute `total`/`lineTotal` from
-  anything other than the `CartLine`s it's given (e.g. don't have it
-  re-fetch the product to "double check" the price) — that would
-  reintroduce exactly the bug the snapshot pattern exists to prevent.
+- Don't let `SaleDetailModal` (or anything else) make `items`, `total`,
+  `paymentMethod`, `amountReceived`, `change`, `date`, `time`, or
+  `createdAt` on a saved `Sale` editable. `notes` is the one field this
+  phase deliberately made mutable — see "Decisions Already Made" above.
+- `deleteSale` must keep deleting from both `sales` and `saleItems` in one
+  transaction. Don't split this into two separate calls/transactions —
+  that would reopen the exact "can be left inconsistent" risk
+  `recordSale`'s single transaction already exists to prevent.
+- Don't move `listSales`/`deleteSale`/`updateSaleNotes` out of
+  `salesService.ts` into a new file — Phase 5 (Reports) is expected to
+  also read from this file (or add its own read functions here), matching
+  the one-service-per-store pattern used everywhere else in this project.
 
 ## Next Phase
 
-**PHASE 4 — Sales History + Dashboard.** See `NEXT_PHASE_PROMPT.md` for the
-exact brief.
+**PHASE 5 — Reports.** See `NEXT_PHASE_PROMPT.md` for the exact brief.
 
 ## Recommended First Steps
 
 1. Read `README.md`, `PROJECT_STATUS.md`, this file, and
    `NEXT_PHASE_PROMPT.md`.
-2. **Run `npm install && npm run build && npx oxlint && npm run
-   smoke-test` before writing any Phase 4 code.** Neither Phase 2 nor
-   Phase 3's code has ever been through any of these — treat this as step
-   zero, not optional, and fix anything they surface (including in the
-   Phase 3 sales round-trip smoke test, which has never actually been
-   executed) before proceeding.
-3. Run `npm run dev` and manually complete a few full sales (different
-   payment methods, different product/quantity combinations, at least one
-   with insufficient cash to confirm validation blocks it) before changing
-   anything. This is real manual QA that could not be done in Phases 2 or
-   3.
-4. Read `src/services/salesService.ts` (what a saved `Sale` looks like)
-   and `src/types/index.ts`'s `Sale`/`SaleItem` types.
-5. Build `listSales`/`getSale`/`deleteSale` in `salesService.ts` (query the
-   `sales` store, probably via the existing `by-date` index for a
-   most-recent-first list).
-6. Build the Sales History screen (`src/pages/HistoryPage.tsx`, replacing
-   its Phase 0 placeholder): list, search, transaction detail view,
-   delete (with a confirmation dialog this time — unlike the reversible
-   deactivate/clear-cart actions in earlier phases, deleting a sale is
-   destructive and irreversible, so the master spec's requirement for
-   confirmation here is different from those).
-7. Build the dashboard stats called for in the Phase 4 brief (today's
-   sales, transaction count, items sold, average sale, payment breakdown,
-   top products) — decide where they live (a new section of `HistoryPage`,
-   or a separate dashboard area) and document the choice.
-8. Update `PROJECT_STATUS.md`, `HANDOFF.md`, and replace
-   `NEXT_PHASE_PROMPT.md` with Phase 5 instructions before stopping.
+2. Run `npm install && npx tsc -b && npm run build && npx oxlint && npm
+   run smoke-test` before writing any Phase 5 code, to confirm your
+   environment matches the state this phase left things in.
+3. **Do the manual click-through this phase couldn't do**: record several
+   real sales via the POS screen, then exercise Sales History fully
+   (list, detail, search, delete with confirm/cancel, notes) and confirm
+   the dashboard numbers, at both mobile and desktop widths, before
+   building Reports on top of it.
+4. Read `src/services/salesService.ts` (especially `listSales`, and the
+   `by-date`/`by-saleId` indexes it and `deleteSale` use) and
+   `src/pages/HistoryPage.tsx` (the "today"-scoped dashboard computation
+   you'll likely generalize into a date-range version for Reports).
+5. Check the original master spec's Phase 5 section for what belongs here
+   vs. what Phase 4 already covered (today-only dashboard, simple product-
+   name search) before deciding how much date-range/product-performance UI
+   to build.
+6. Update `PROJECT_STATUS.md`, `HANDOFF.md`, and replace
+   `NEXT_PHASE_PROMPT.md` with Phase 6 instructions before stopping.
 
 ## Testing Status
 
 | Check | Result |
 |---|---|
-| `npm install` (retried this phase) | ❌ Failed again — `403 Forbidden` from `registry.npmjs.org`, same as Phase 2 |
-| `npx tsc -b` / `npm run build` / `npx oxlint` / `npm run smoke-test` | ⛔ Not run — no `node_modules` |
-| `esbuild` syntax check on `salesService.ts`, `CheckoutModal.tsx`, `CartPanel.tsx`, `PosPage.tsx`, `smoke-test-db.ts` | ✅ Pass, 0 errors |
-| `esbuild --bundle` from `src/main.tsx` (app) and from `scripts/smoke-test-db.ts` (smoke test), externalizing only real npm packages | ✅ Pass both — every relative import resolves, 0 errors |
-| Manual click-through of a full sale (cash + non-cash, various carts) in a real/headed browser | ❌ Not done — no headed browser available in this environment |
+| `npm install` | ✅ Passed — this session had working npm registry access (unlike Phases 2–3's sessions) |
+| `npx tsc -b` | ✅ Passed, 0 errors |
+| `npm run build` | ✅ Passed |
+| `npx oxlint` | ✅ 0 errors; 5 warnings total, all the same pre-existing `react(set-state-in-effect)` style warning already present on `CategoriesManager.tsx`/`PaymentMethodsManager.tsx` (now also on `HistoryPage.tsx`, which uses the same `void refresh()`-in-`useEffect` pattern) |
+| `npm run smoke-test` | ✅ All 26 assertions passed, including — for the first time — Phase 3's sales round-trip/price-snapshot test (never actually executed before this session) and the new Phase 4 `listSales`/`deleteSale` tests. Run 8 times in a row to confirm; the first run caught a real ordering race (see "Current Architecture" — `listSales`'s `createdAt` tiebreaker), which was fixed and then re-verified stable across 8 further runs |
+| Manual click-through of Sales History (list/detail/search/delete/notes) in a real/headed browser | ❌ Not done — no headed browser available in this environment |
+| Manual click-through of Phase 2/3 flows (product grid, cart, checkout) | ❌ Also still not done, despite the automated checks now passing — see note under "Overall Project Progress" |
 | Real mobile device check | ❌ Not done |
-| Confirmed Phase 0–2 functionality untouched | ✅ Verified by inspection — only `CartPanel.tsx` and `PosPage.tsx` were modified; `salesService.ts` and `CheckoutModal.tsx` are new, isolated files |
+| Confirmed Phase 0–3 functionality untouched | ✅ Verified by both inspection (only `HistoryPage.tsx`, `salesService.ts`, `components.css`, and `smoke-test-db.ts` were touched) and by the full smoke-test suite passing, including every pre-existing Phase 1–3 assertion |

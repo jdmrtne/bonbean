@@ -88,7 +88,31 @@ async function main() {
   assert(reReadItem?.unitPriceSnapshot === 85, "SaleItem price snapshot unchanged after product price update");
   assert((await db.get("products", croissant.id))?.price === 95, "live product price did update (snapshot is independent, not stale data)");
 
-  // 5. Settings update
+  // 5. Sales history: listSales + deleteSale (PHASE 4)
+  const { listSales, deleteSale } = await import("../src/services/salesService");
+
+  const secondSale = await recordSale({
+    lines: [{ productId: latte.id, name: "Iced Latte", unitPrice: 150, quantity: 1 }],
+    paymentMethod: "GCash",
+  });
+
+  const allSales = await listSales();
+  assert(allSales.length === 2, "listSales returns both recorded sales");
+  assert(allSales[0].id === secondSale.id, "listSales sorts most-recent-first");
+
+  await deleteSale(sale.id);
+  const afterDelete = await listSales();
+  assert(afterDelete.length === 1, "deleteSale removes exactly one sale");
+  assert(afterDelete[0].id === secondSale.id, "the untouched sale is still present after delete");
+
+  const deletedSaleRecord = await db.get("sales", sale.id);
+  assert(deletedSaleRecord === undefined, "deleted sale's record is gone from the sales store");
+  const orphanedItems = await db.getAllFromIndex("saleItems", "by-saleId", sale.id);
+  assert(orphanedItems.length === 0, "deleted sale's saleItems are also gone (no orphans)");
+  const survivingItems = await db.getAllFromIndex("saleItems", "by-saleId", secondSale.id);
+  assert(survivingItems.length === 1, "the untouched sale's saleItems are still present");
+
+  // 6. Settings update
   await updateSettings({ businessName: "Test Cart" });
   const updated = await getSettings();
   assert(updated.businessName === "Test Cart", "settings update persists");
