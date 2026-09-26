@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Button } from "./Button";
 import { Card } from "./Card";
 import { EmptyState } from "./EmptyState";
+import { LoadingState } from "./LoadingState";
 import { Modal } from "./Modal";
 import {
   addCategory,
@@ -36,7 +37,7 @@ export function CategoriesManager() {
     );
   }
 
-  if (categories === null) return null;
+  if (categories === null) return <LoadingState label="Loading categories…" />;
 
   return (
     <>

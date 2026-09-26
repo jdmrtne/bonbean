@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { CartPanel } from "../components/CartPanel";
 import { CheckoutModal } from "../components/CheckoutModal";
 import { EmptyState } from "../components/EmptyState";
+import { LoadingState } from "../components/LoadingState";
 import { Modal } from "../components/Modal";
 import { listCategories } from "../services/categoriesService";
 import { listPaymentMethods } from "../services/paymentMethodsService";
@@ -86,7 +87,7 @@ export function PosPage() {
     );
   }
 
-  if (categories === null || products === null) return null;
+  if (categories === null || products === null) return <LoadingState label="Loading products…" />;
 
   return (
     <>

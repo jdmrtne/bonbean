@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Button } from "./Button";
 import { Card } from "./Card";
 import { EmptyState } from "./EmptyState";
+import { LoadingState } from "./LoadingState";
 import { Modal } from "./Modal";
 import { listCategories } from "../services/categoriesService";
 import { getSettings } from "../services/settingsService";
@@ -49,7 +50,7 @@ export function ProductsManager() {
     );
   }
 
-  if (products === null) return null;
+  if (products === null) return <LoadingState label="Loading products…" />;
 
   const categoryName = (id: string) => categories.find((c) => c.id === id)?.name ?? "Uncategorized";
   const noCategories = categories.length === 0;

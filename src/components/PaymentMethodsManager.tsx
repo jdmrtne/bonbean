@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Button } from "./Button";
 import { Card } from "./Card";
 import { EmptyState } from "./EmptyState";
+import { LoadingState } from "./LoadingState";
 import { Modal } from "./Modal";
 import {
   addPaymentMethod,
@@ -36,7 +37,7 @@ export function PaymentMethodsManager() {
     );
   }
 
-  if (methods === null) return null;
+  if (methods === null) return <LoadingState label="Loading payment methods…" />;
 
   return (
     <>

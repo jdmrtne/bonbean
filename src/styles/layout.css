@@ -34,6 +34,23 @@
   display: flex;
   align-items: center;
   gap: var(--space-2);
+  min-width: 0;
+}
+
+/* Mobile-only brand mark (PHASE 9). Desktop already shows the brand in
+   .app-sidebar__brand; on mobile the sidebar is hidden (Phase 8 bug
+   fix) so this was the only place left to show app identity. Replaces
+   the tagline on narrow screens rather than sitting alongside it —
+   showing both crowded a 390px-wide topbar. */
+.app-topbar__brand-mobile {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.app-topbar__page {
+  display: none;
 }
 
 .app-topbar__mark {
@@ -52,6 +69,9 @@
 .app-topbar__title {
   font: var(--text-title);
   letter-spacing: -0.01em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .app-topbar__page {
@@ -145,6 +165,14 @@
     align-items: center;
     gap: var(--space-2);
     padding: var(--space-2) var(--space-2) var(--space-5);
+  }
+
+  .app-topbar__brand-mobile {
+    display: none;
+  }
+
+  .app-topbar__page {
+    display: block;
   }
 
   .app-sidebar__link {

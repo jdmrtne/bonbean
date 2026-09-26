@@ -2,397 +2,312 @@
 
 ## Current Phase
 
-PHASE 8 — COMPLETE, and verified for real: this session had working npm
-registry access AND a pre-installed headless Chromium, both for the
-first time since Phase 4. The full toolchain ran (twice — once against
-Phases 5–7's previously-unverified code, once again after this phase's
-changes), and a real headless-browser click-through happened for the
-first time in this project's history, which also caught and fixed one
-real pre-existing bug. See "Testing Status" for the full detail.
+PHASE 9 — COMPLETE. This session again had working npm registry access
+AND a headless Chromium available (same combination Phase 8 had), so
+the full toolchain ran clean and a real before/after mobile-viewport
+screenshot pass verified this phase's own goal (mobile UX) directly,
+not just by code review. See "Testing Status" for full detail.
 
 ## Overall Project Progress
 
 ```
 PHASE 0  — Project Foundation           — COMPLETE
 PHASE 1  — Database + Product Mgmt      — COMPLETE
-PHASE 2  — POS + Cart                   — COMPLETE (pending human verification; headless click-through done this session, see Phase 8 notes)
-PHASE 3  — Sales Recording              — COMPLETE (automated checks passed Phases 4 and 8's sessions; headless click-through done Phase 8)
-PHASE 4  — Sales History + Dashboard    — COMPLETE (automated checks passed Phases 4 and 8's sessions; headless click-through done Phase 8)
-PHASE 5  — Reports                      — COMPLETE (automated checks passed for the first time this session — see Testing Status; pending human click-through)
-PHASE 6  — Excel + PDF Export           — COMPLETE (automated checks passed for the first time this session; pending human click-through of the actual CSV/print output)
-PHASE 7  — Backup + Restore             — COMPLETE (automated checks passed AND the real-IndexedDB restore round-trip was finally run — both in smoke-test AND in a live headless-browser click-through this session)
-PHASE 8  — Offline + PWA                — COMPLETE (full toolchain + a real headless-browser offline click-through done this session)
-PHASE 9  — Polish + Mobile UX           — NOT STARTED
+PHASE 2  — POS + Cart                   — COMPLETE (pending human verification; headless click-through done Phase 8)
+PHASE 3  — Sales Recording              — COMPLETE (automated checks passed; headless click-through done Phase 8)
+PHASE 4  — Sales History + Dashboard    — COMPLETE (automated checks passed; headless click-through done Phase 8)
+PHASE 5  — Reports                      — COMPLETE (automated checks passed; pending human click-through)
+PHASE 6  — Excel + PDF Export           — COMPLETE (automated checks passed; pending human click-through of actual CSV/print output)
+PHASE 7  — Backup + Restore             — COMPLETE (automated checks AND a real-IndexedDB restore round-trip both passed, Phase 8)
+PHASE 8  — Offline + PWA                — COMPLETE (full toolchain + real headless-browser offline click-through, Phase 8)
+PHASE 9  — Polish + Mobile UX           — COMPLETE (full toolchain + real headless-browser before/after mobile screenshot pass, this session)
 PHASE 10 — Final QA + Release            — NOT STARTED
 ```
 
-**Important note on this session's environment:** unlike Phases 5, 6,
-and 7 (no npm registry access), this session's container had a working
-`npm install`, AND a headless Chromium already installed at
-`/opt/pw-browsers` (Playwright's browser download CDN itself is NOT in
-this environment's allowed network domains, so that pre-installed
-binary was the only way a real browser was usable — don't assume a
-future session can `npx playwright install` from scratch; check
-`/opt/pw-browsers` first). This combination — working toolchain AND a
-real browser — has not happened together before in this project. Don't
-assume it'll be true next session either; always check both at the
-start (see "Recommended First Steps").
+**Environment note, carried forward from Phase 8's own note:** this
+session again had both working `npm install` AND a headless Chromium
+pre-installed at `/opt/pw-browsers`. Don't assume this persists into
+Phase 10 — check both at the start, same as every phase's
+"Recommended First Steps" says. One new wrinkle this session found (see
+"Testing Status"): the pre-installed Chromium's plain `chrome` binary
+refuses to launch in old-headless mode ("Old Headless mode has been
+removed from the Chrome binary"). Use the sibling
+`chromium_headless_shell-*/chrome-linux/headless_shell` binary instead
+— Phase 8 didn't hit this because its own click-through script must
+have already pointed at the right binary, but it wasn't documented, so
+recording it here for Phase 10.
 
 ## What Has Been Built
 
-Everything from Phases 0–7 (app shell, routing, design tokens,
-IndexedDB schema, Product/Category/Payment Method management, the POS
-grid and cart, sales recording with price/name snapshots, Sales History
-with a "Today" dashboard, Reports, CSV + print/PDF export, Backup +
-Restore), **plus**, from Phase 8:
+Everything from Phases 0–8 (app shell, routing, design tokens,
+IndexedDB schema, Product/Category/Payment Method management, POS grid
+and cart, sales recording, Sales History + dashboard, Reports, CSV +
+print/PDF export, Backup + Restore, offline + PWA install), **plus**,
+from Phase 9:
 
-- `public/manifest.webmanifest` — see PROJECT_STATUS.md for the full
-  field list. `start_url` is `/#/` to match `HashRouter`.
-- `public/icons/icon-192.png`, `icon-512.png`, `icon-512-maskable.png`
-  — rasterized from `public/favicon.svg` via `cairosvg` (pip-installed;
-  no new npm dependency) + a Pillow compositing step for the maskable
-  icon's safe-zone padding. Regenerate these from `favicon.svg` if the
-  logo ever changes — they are NOT hand-maintained pixel art.
-- `public/sw.js` — hand-written service worker. See "Current
-  Architecture" below for the caching strategy and "Decisions Already
-  Made" for why it's hand-written instead of `vite-plugin-pwa`.
-- `src/pwa/registerServiceWorker.ts` — registration + update-available
-  event bridge (`coffee-cart-pos:sw-update-available` on `window`).
-  Deliberately not a React hook — see its own header comment.
-- `src/hooks/useOnlineStatus.ts`, `src/hooks/useServiceWorkerUpdate.ts`
-  — thin hooks over browser APIs / the above event.
-- `src/components/StatusBanners.tsx` — offline / update-available
-  banner, mounted once in `AppShell.tsx` above the routed content.
-- `index.html` — manifest link, apple-touch-icon, iOS PWA meta tags.
-- `src/main.tsx` — `registerServiceWorker()` call, gated on
-  `import.meta.env.PROD`.
-- `src/styles/components.css` — `.banner--offline`, `.banner--update`,
-  `.app-status-banner`.
-- **Bug fix, not a Phase 8 feature**: `src/styles/layout.css` gained a
-  `.app-sidebar { display: none; }` base rule. This was a pre-existing
-  bug from Phase 0/2 (the sidebar had no mobile rule at all and
-  rendered as unstyled overlapping links on any phone-width screen),
-  found via this session's first-ever real mobile-viewport screenshot.
-  See "Known Issues" for the cosmetic side effect this fix exposed
-  (no app branding visible on the mobile topbar).
-- `scripts/smoke-test-db.ts` — a short section 10 comment (intentionally
-  no fake tests) explaining that offline/PWA code has no pure,
-  dependency-free logic to extract, the same reasoning `utils/
-  download.ts` (Phase 6) already established.
+- **Mobile brand mark in the topbar.** `src/components/AppShell.tsx`'s
+  `.app-topbar` now renders a `.app-topbar__brand-mobile` block (the
+  same "☕" mark + "Coffee Cart" title markup/classes the desktop
+  sidebar already used) that's visible only below the 860px breakpoint,
+  replacing the tagline there. Desktop is untouched: the sidebar's
+  brand mark still covers it, and the topbar's tagline (`.app-topbar__page`)
+  reappears via the existing desktop media query.
+- **`src/components/LoadingState.tsx`** — new. A spinner-based loading
+  indicator styled to reuse `.empty-state`'s exact layout (icon slot →
+  spinner, title styling unchanged) rather than a new visual pattern.
+  `role="status"`, `aria-live="polite"`, and a `prefers-reduced-motion`
+  fallback that removes the spin animation. Takes an optional `label`
+  prop (defaults to "Loading…"; each call site below passes a more
+  specific one).
+- **Six loading-state call sites**, replacing a bare `return null`
+  during the initial IndexedDB read: `PosPage.tsx` ("Loading
+  products…"), `HistoryPage.tsx` ("Loading sales history…"),
+  `ReportsPage.tsx` ("Loading reports…"), `ProductsManager.tsx`
+  ("Loading products…"), `CategoriesManager.tsx` ("Loading
+  categories…"), `PaymentMethodsManager.tsx` ("Loading payment
+  methods…"). `StatusBanners.tsx`'s own `return null` (its correct
+  "nothing to show" state, not a loading state) was intentionally left
+  alone.
+- **Touch-target sizing**, all in `src/styles/components.css`:
+  `.qty-stepper__btn` 36→44px, `.modal-sheet__close` 32→44px, and three
+  separate `min-height: 40px` rules (`.segmented__item`,
+  `.category-tabs__item`, `.range-tabs__item`) → 44px. Side effect
+  fixed in the same file: `.cart-line`'s gap (space-3→space-2) and
+  `.qty-stepper`'s internal gap (space-2→space-1) were tightened, since
+  the bigger stepper buttons had started crowding out the product name
+  column on a 390px cart line (verified with a screenshot before and
+  after this specific tweak — see "Testing Status").
+- `public/sw.js` — `CACHE_VERSION` bumped `"v1"` → `"v2"` (both changed
+  CSS files are cached by the service worker).
+- `scripts/mobile-screens.mjs` — new, NOT an npm script, NOT a project
+  dependency-user (see its own header comment for the full "how to run
+  this" detail, including the `playwright-core`/Chromium wrinkles
+  above). A reusable screenshot harness for any future phase that wants
+  a real before/after mobile pass.
 
-Still not built: general mobile polish beyond what this phase already
-fixed (the sidebar bug) and beyond what Phases 0–7 already did
-responsively. That's Phase 9.
+Still not built: real mobile device testing (touch, real "Add to Home
+Screen", real intermittent connectivity) — see "Known Issues", carried
+from Phase 8, unchanged. Final cross-phase QA is Phase 10's job.
 
 ## Current Architecture
 
-Unchanged from Phases 0–7. Additions this phase:
+Unchanged from Phases 0–8 except where noted above. Nothing about
+routing, the database, the service worker's caching *strategy*, or the
+update flow's *mechanism* changed this phase — only `CACHE_VERSION`
+(a version bump, not a strategy change) and the CSS/component
+additions listed above.
 
-- **The service worker is hand-written, not `vite-plugin-pwa`** — see
-  "Decisions Already Made" for the full reasoning (the same
-  no-new-npm-dependency trade-off Phase 6 made for PDF export, chosen
-  again here since this project still can't rely on npm registry access
-  being available session-to-session).
-- **Caching strategy: cache-first for the app shell, populated at
-  runtime, not from a precompiled precache manifest.** `sw.js`
-  precaches a small fixed list of author-known, UNHASHED URLs on
-  install (`/`, `/index.html`, `/manifest.webmanifest`, `/favicon.svg`,
-  the two non-maskable icons). Everything else — the hashed Vite JS/CSS
-  bundle, self-hosted Manrope font files — is cached opportunistically
-  the first time each is actually fetched (cache-first: check cache,
-  fall back to network and cache the response). This avoids needing a
-  build-time step that knows Vite's hashed output filenames, at the
-  cost of the very first-ever page load needing to be online (expected
-  and fine — nobody can install/use the app before visiting it once).
-- **Navigation requests are served from cached `/index.html`
-  first.** `HashRouter` means every route (`/#/`, `/#/history`, etc.)
-  is the same document — the hash fragment never reaches the network —
-  so this one cache entry covers every route offline. Confirmed working
-  in this session's click-through for `/#/`, `/#/products`, and
-  `/#/history` while offline.
-- **No automatic cache-busting.** `CACHE_VERSION` in `sw.js` is a
-  hand-bumped string; `activate` deletes any cache whose name doesn't
-  match the current version. A future phase that changes any cached
-  file MUST bump this manually or stale assets could persist. This is
-  a known, documented trade-off of not using a build-integrated PWA
-  plugin — see "Known Issues".
-- **Update flow: manual, not silent.** The service worker never calls
-  `self.skipWaiting()` on its own. `registerServiceWorker.ts` detects a
-  new worker reaching the "installed" state while an old one is still
-  controlling the page, and dispatches a window event;
-  `StatusBanners.tsx` shows a "Reload to update" banner; only clicking
-  it posts `SKIP_WAITING` to the waiting worker, which triggers
-  `controllerchange`, which triggers exactly one `window.location.
-  reload()`. This was a deliberate choice so a new deploy can never
-  silently interrupt an in-progress sale on the POS screen. Confirmed
-  by code review and by manually checking `registration.waiting`/
-  `installing` state via `page.evaluate` in this session's
-  click-through (a real second-deploy update was NOT tested — see
-  "Known Issues" — but the underlying mechanism was exercised as far as
-  a single-build test setup allows).
-- **This reload is unrelated to `BackupManager.tsx`'s own
-  `window.location.reload()` after a restore (Phase 7).** They don't
-  interact: a restore's reload is a normal page reload with no
-  `SKIP_WAITING` message involved, so it just re-renders from
-  whatever's currently cached/live — confirmed directly in this
-  session's click-through (restored a backup while an update was NOT
-  pending; no interference observed).
-- **The offline/update banner is one component (`StatusBanners.tsx`),
-  mounted once in `AppShell.tsx`**, not threaded through every page.
-  Offline takes priority over showing the update prompt (no point
-  offering a reload that can't fetch the new version anyway).
+- **The mobile topbar brand mark is a second copy of the same
+  mark/title markup the sidebar uses**, shown/hidden by media query
+  rather than the two being merged into one shared subcomponent. This
+  was a deliberate lean choice (two small, obviously-related JSX blocks
+  vs. extracting a `<BrandMark />` for a one-phase, two-call-site need)
+  — a future phase touching branding again should consider extracting
+  it if a third call site appears.
+- **`LoadingState` deliberately does not distinguish "slow load" from
+  "instant load"** — it always renders for at least one paint before
+  data arrives (there's no minimum-display-time debounce). On a fast
+  device/warm cache this is visually a single flash; nobody reported
+  this as a problem in the mobile screenshot pass, but a future phase
+  could add a short delay-before-showing if it proves distracting in
+  practice.
 
 ## DO NOT CHANGE
 
-Everything in Phases 0–7's version of this section still applies
+Everything in Phases 0–8's version of this section still applies
 (price/name snapshot rule, `utils/reportStats.ts`/`utils/csv.ts`/
-`utils/salesExport.ts`/`utils/backup.ts` not importing `database/db.ts`,
-`restoreBackup`'s full-replace behavior, the backup JSON's top-level key
-names). Additionally, as of Phase 8:
+`utils/salesExport.ts`/`utils/backup.ts` not importing
+`database/db.ts`, `restoreBackup`'s full-replace behavior, the backup
+JSON's top-level key names, no `self.skipWaiting()`, cache-first
+strategy, the `.app-sidebar { display: none; }` mobile rule). Additionally, as of Phase 9:
 
-- Don't add `self.skipWaiting()` to `sw.js`'s `install` handler, and
-  don't have `registerServiceWorker.ts` auto-apply an update without
-  the person clicking the banner. This is a deliberate safety choice
-  (see "Current Architecture") — a silent takeover could interrupt an
-  in-progress sale.
-- Don't switch the caching strategy away from cache-first for the app
-  shell without a real reason — this app's whole point is working with
-  unreliable connectivity, so a network-first or stale-while-revalidate
-  strategy that requires a round-trip before showing content would work
-  against that goal.
-- Don't forget to bump `CACHE_VERSION` in `public/sw.js` when changing
-  any cached file in a future phase — there is no automatic cache
-  invalidation.
-- Don't regenerate the manifest icons by hand-editing the PNGs directly
-  — regenerate from `public/favicon.svg` (see the icon files' origin
-  above) so they stay in sync with the actual logo.
-- Don't remove the `.app-sidebar { display: none; }` base rule added
-  this phase (in `layout.css`, just above the desktop media query) —
-  it fixes a real broken-mobile-nav bug; removing it reintroduces
-  unstyled overlapping navigation links on every phone-width screen.
+- Don't remove `.app-topbar__page { display: none; }`'s base (mobile)
+  rule or the media-query override that restores it on desktop — doing
+  either reintroduces either a missing desktop tagline or a crowded
+  mobile topbar (brand mark + tagline both visible on a 390px screen).
+- Don't forget to bump `CACHE_VERSION` in `public/sw.js` on any future
+  change to a cached file — this phase is the second time this has
+  needed doing (Phase 8 documented the rule; this phase is the first
+  time it actually mattered).
+- Don't shrink `.qty-stepper__btn`, `.modal-sheet__close`,
+  `.segmented__item`, `.category-tabs__item`, or `.range-tabs__item`
+  back below ~44px — they were found undersized by a real mobile
+  screenshot, not a guideline lookup.
 
 ## Next Phase
 
-**PHASE 9 — Polish + Mobile UX.** See `NEXT_PHASE_PROMPT.md` for the
+**PHASE 10 — Final QA + Release.** See `NEXT_PHASE_PROMPT.md` for the
 exact brief.
 
 ## Recommended First Steps
 
 1. Read `README.md`, `PROJECT_STATUS.md`, this file, and
    `NEXT_PHASE_PROMPT.md`.
-2. **Check environment capabilities FIRST, don't assume**: try
-   `npm ping` / `npm install`, and check for a headless browser at
-   `/opt/pw-browsers` (or wherever `PLAYWRIGHT_BROWSERS_PATH` points —
-   `echo $PLAYWRIGHT_BROWSERS_PATH`) before deciding what's possible
-   this session. This session had BOTH for the first time since Phase
-   4 — don't assume that persists, and don't assume it's absent either.
+2. Check environment capabilities first: `npm ping`/`npm install`, and
+   `echo $PLAYWRIGHT_BROWSERS_PATH` + look for a prebuilt Chromium
+   there. If you find one, remember the `chrome` vs `headless_shell`
+   binary wrinkle noted above under "Overall Project Progress" —
+   `chrome` alone may refuse to launch headless.
 3. If npm access works, run `npm install && npx tsc -b && npm run
-   build && npx oxlint && npm run smoke-test` before writing any Phase
-   9 code, same as always. Everything was clean as of this handoff, but
-   confirm it's still clean before building on top of it.
-4. If a headless browser is available, USE IT — this session's
-   click-through caught a real bug (the mobile sidebar) that six
-   phases of code review missed. For Phase 9 (mobile UX polish)
-   specifically, a real mobile-viewport screenshot pass is directly
-   relevant to the phase's own goal, not just a nice-to-have.
-   Specifically worth checking:
-   - The mobile topbar branding gap left open this phase (see "Known
-     Issues") — decide whether/how to show the "Coffee Cart" brand on
-     mobile now that the sidebar bug is fixed and it's no longer
-     accidentally visible there.
-   - A real second-deploy update-banner flow, if practical to set up
-     (build once, change something trivial, build again behind the
-     same preview server, confirm the banner appears in an already-open
-     tab and "Reload to update" works) — this was reasoned about and
-     partially checked this session but never fully end-to-end tested.
-5. Check the original master spec's Phase 9 section for what belongs
-   there (likely: responsive/touch refinements beyond what's already
-   responsive, loading states, animations/transitions, empty-state
-   polish, and anything else "polish" scoped to this app).
-6. Update `PROJECT_STATUS.md`, `HANDOFF.md`, and replace
-   `NEXT_PHASE_PROMPT.md` with Phase 10 instructions before stopping.
+   build && npx oxlint src && npm run smoke-test` before writing any
+   Phase 10 code. **Use `npx oxlint src`, not bare `npx oxlint`** — the
+   bare form also lints `node_modules`/`dist` and buries real output in
+   thousands of irrelevant warnings (discovered this session — see
+   PROJECT_STATUS.md's "Testing Status"). Everything was clean as of
+   this handoff.
+4. If a headless browser is available, use it for final device/viewport
+   QA across every page, both online and offline, plus a "does this
+   feel done" pass — Phase 10 is explicitly about final QA before
+   release, so this is the phase's core activity, not a bonus check.
+   `scripts/mobile-screens.mjs` (see its header) can be adapted/reused
+   rather than rewritten from scratch.
+5. Check the original master spec's Phase 10 section for its exact
+   scope (likely: a full regression pass across every phase's feature,
+   README/user-facing polish, a release checklist, and whatever
+   "release" means for a project with no backend/deployment pipeline of
+   its own — e.g. confirming the built `dist/` folder is a complete,
+   correct static site ready to host anywhere).
+6. Update `PROJECT_STATUS.md` and `HANDOFF.md` to mark the project
+   fully complete, and leave a final closing note in
+   `NEXT_PHASE_PROMPT.md` (or remove it, if Phase 10 is intended to be
+   the last phase) rather than drafting a Phase 11 brief that doesn't
+   exist in the master spec.
 
 ## Testing Status
 
 | Check | Result |
 |---|---|
 | `npm install` | ✅ Succeeded — 41 packages, 0 vulnerabilities |
-| `npx tsc -b` | ✅ Clean — run both BEFORE this phase's changes (verifying Phases 5–7's TypeScript for the first time) and AFTER (verifying this phase's new files) |
-| `npm run build` (`vite build`) | ✅ Succeeded both times; confirmed `dist/manifest.webmanifest`, `dist/sw.js`, and `dist/icons/*.png` all present as expected |
-| `npx oxlint` | ✅ 0 errors both times. 5 pre-existing warnings, all in Phase 1–4 files (`ProductsManager.tsx`, `PaymentMethodsManager.tsx`, `CategoriesManager.tsx`, `HistoryPage.tsx`), unrelated to Phases 5–8, zero new warnings introduced |
-| `npm run smoke-test` | ✅ ALL assertions passed, including — for the first time ever — section 9's real-IndexedDB backup/restore round-trip |
-| Real headless-browser click-through (Playwright/Chromium, pre-installed at `/opt/pw-browsers`) | ✅ Done for the first time in this project's history. Added a category + product, rang a real sale with correct cash-received validation, confirmed Sales History/dashboard totals, exported a real backup and inspected its JSON, went offline and confirmed the full app shell + all routes + a SECOND real IndexedDB write (another sale) all worked with zero network, went back online and restored the FIRST backup, and confirmed the app correctly discarded the offline-only sale (full-replace restore verified end-to-end for real, not just in a mocked unit test) |
-| Chrome `Page.getInstallabilityErrors` (via CDP) | ✅ Returned an empty array — manifest + service worker meet Chrome's baseline install criteria |
-| Mobile-viewport screenshot (390×844, online and offline) | ✅ Done; found the `.app-sidebar` mobile bug (see "Current Architecture"/"Known Issues"), fixed it, re-verified with a second screenshot |
-| Update-banner flow (`updatefound` → banner → `SKIP_WAITING` → reload) | ⚠️ Code-reviewed and the waiting/installed state was inspected via `page.evaluate`, but a REAL second-deploy update was not exercised end-to-end this session (would need two builds served behind the same origin with a tab already open) — see "Known Issues" |
-| Real mobile DEVICE testing (vs. desktop-browser viewport emulation) | ❌ Not done — touch interactions, real "Add to Home Screen" on iOS/Android, and real intermittent connectivity (vs. Playwright's instant toggle) remain unverified |
-| Confirmed Phase 0–7 functionality unbroken | ✅ Confirmed by BOTH the smoke-test suite passing AND the click-through actually using POS/checkout, History, and Backup/Restore live in a browser — the strongest confirmation this project has had since Phase 4 |
+| `npx tsc -b` | ✅ Clean, before and after this phase's changes |
+| `npm run build` (`vite build`) | ✅ Succeeded, both before and after the mid-phase cart-line gap tweak |
+| `npx oxlint src` | ✅ 0 errors, 4 pre-existing warnings (same `setState`-in-effect pattern as Phase 8, one fewer instance counted — not a fix, just how the count landed). **Note:** bare `npx oxlint` (no path arg) also scans `node_modules` and any stale `dist/`, producing ~18,000 irrelevant warnings/errors from React's own code — always scope to `src`. |
+| `npm run smoke-test` | ✅ All 58 assertions passed, unchanged from Phase 8 (no business logic touched this phase) |
+| Real headless-browser mobile screenshot pass (390×844, before Phase 9 changes) | ✅ Done — confirmed the branding gap (no "Coffee Cart" text anywhere on a phone screen) and the undersized cart +/− buttons, both previously only reasoned about from Phase 8's "Known Issues" |
+| Real headless-browser mobile screenshot pass (390×844, after Phase 9 changes) | ✅ Done — brand mark now visible on every screen; touch targets visibly bigger; caught the cart-line name-truncation side effect and re-verified the fix with a *third* screenshot pass |
+| Desktop layout check (1280px, after Phase 9 changes) | ✅ Done — sidebar brand mark + topbar tagline both still render, no duplication introduced by the new mobile-only brand mark |
+| Offline reload check (after Phase 9 changes + `CACHE_VERSION: v2`) | ✅ Done — build, serve, go offline, reload: offline banner still renders correctly alongside the new mobile brand mark, no layout overlap, confirming the cache-version bump didn't break offline loading |
+| Real mobile DEVICE testing | ❌ Not done — carried from Phase 8, still outstanding |
+| Update-banner flow with a real second deploy | ❌ Not done — carried from Phase 8, this phase didn't touch the update mechanism |
+| Confirmed Phase 0–8 functionality unbroken | ✅ Smoke-test suite passing + the offline/desktop screenshot checks actually exercising POS, navigation, and the offline banner live in a browser |
 
 ## Known Issues
 
-- **The mobile topbar shows no app branding.** `app-topbar` only ever
-  rendered the tagline ("Sales recording, made simple"); the "Coffee
-  Cart" brand + icon live in `.app-sidebar__brand`, which is (now
-  correctly) hidden on mobile. Before this phase's bug fix, the brand
-  was accidentally visible (as broken, unstyled overlapping text) on
-  mobile; now it's correctly hidden along with the rest of the broken
-  sidebar, but that leaves no branding on the phone screen at all.
-  Cosmetic only — natural fit for Phase 9.
-- **`CACHE_VERSION` in `public/sw.js` requires a manual bump** on any
-  deploy that changes a cached file — no automatic cache-busting exists
-  without adding a build-integrated PWA plugin (a deliberate trade-off,
-  see "Decisions Already Made"). Easy to forget; worth a code-review
-  checklist item for future phases.
-- **The update-banner flow was not tested end-to-end with a real
-  second deploy** — see "Testing Status". The mechanism is standard and
-  was checked as far as a single-build session allows (waiting/
-  installed worker states inspected directly), but nobody has watched
-  an already-open tab actually show the banner after a real new
-  version was deployed and clicked "Reload to update".
-- Real mobile DEVICE testing remains outstanding (headless-browser
-  viewport emulation is not the same as a real phone) — see "Testing
-  Status".
+- **Real mobile DEVICE testing remains outstanding** (carried from
+  Phase 8) — headless-browser viewport emulation is not the same as a
+  real phone; touch interactions, real "Add to Home Screen" flows, and
+  real intermittent connectivity remain unverified.
+- **The update-banner flow still hasn't been tested end-to-end with a
+  real second deploy** (carried from Phase 8) — this phase didn't touch
+  the service-worker update mechanism.
+- **Cart line product names can still truncate at 390px** for a
+  sufficiently long name (e.g. "Large Iced Caramel Macchiato"), even
+  after this phase's gap-tightening fix gave the name column more
+  room. Not a regression — it always truncated — just not fully solved.
+  A future phase could let the name wrap to two lines instead.
+- **`LoadingState` has no minimum-display-time debounce** — see
+  "Current Architecture". Not observed to be a problem, but worth
+  knowing if a future phase adds a slower data source.
 - (Carried from Phase 7) No format-version migration path for backup
-  files — `validateBackupFile` rejects anything that isn't exactly
-  `formatVersion: 1`.
-- (Carried from Phase 7) The native file-picker UI
-  (`accept="application/json,.json"`) hasn't been checked on a real
-  mobile browser's file picker specifically (only in headless Chrome's
-  emulated mobile viewport, which uses the desktop file picker).
+  files.
+- (Carried from Phase 7) The native file-picker UI hasn't been checked
+  on a real mobile browser's file picker.
 - (Carried from Phase 6) No PDF-generation library; "PDF export" is
-  `window.print()` + a print stylesheet — reasoned about, not
-  click-tested this session (the click-through this session focused on
-  Backup/Restore and offline, since those were the highest-priority
-  gaps; Export's actual print/PDF output is still only code-reviewed).
+  `window.print()` + a print stylesheet.
 - (Carried from Phase 6) CSV export doesn't add a UTF-8 BOM.
-- (Carried from Phase 5) "This month"/"Last month" use the local system
-  clock's calendar month boundaries (not UTC).
+- (Carried from Phase 5) "This month"/"Last month" use local calendar
+  month boundaries (not UTC).
 - (Carried from Phase 4) Top products in the "Today" dashboard are
-  quantity-only by design; Reports offers both quantity and revenue.
+  quantity-only by design.
 - (Carried from Phase 3) "Cash" detection is by payment-method name
   match, not a stored flag.
 - (Carried from Phase 2) No confirmation dialog before "Clear cart".
 - (Carried from Phase 2) Cart state is in-memory only.
-- (Carried from Phase 1) No dedicated settings UI beyond what
-  Backup/Restore added to the Products page.
+- (Carried from Phase 1) No dedicated settings UI beyond Backup/Restore.
 
 ## Decisions Already Made
 
-Carried from Phases 0–7 (still true, don't change without good reason):
+Carried from Phases 0–8 (still true, don't change without good reason):
 IndexedDB over localStorage; `HashRouter`; plain CSS; self-hosted
 Manrope; `SaleItem` snapshot pattern; soft-delete-only; no confirmation
 dialogs for reversible one-tap actions; cart stays in memory; cash
 detection by name match; range-aggregation logic in
-`utils/reportStats.ts`; no PDF-generation library (browser print
-instead); Backup/Restore is a full replace, lives as a "Backup" tab on
-`ProductsPage.tsx`; `utils/backup.ts` stays dependency-free.
+`utils/reportStats.ts`; no PDF-generation library; Backup/Restore is a
+full replace; hand-written service worker (no `vite-plugin-pwa`);
+cache-first app shell; manual update flow (banner + explicit reload,
+never silent `skipWaiting()`).
 
-New in Phase 8:
+New in Phase 9:
 
-- **Hand-written service worker instead of `vite-plugin-pwa` or any
-  other PWA build plugin.** Same reasoning Phase 6 applied to PDF
-  export: this project has repeatedly gone multiple sessions without
-  npm registry access, and a service worker is a well-documented,
-  dependency-free browser API that doesn't need a build plugin to hand-
-  write correctly. Reversible if a future session with reliably-working
-  npm access wants the extra convenience (auto-generated precache
-  manifests, etc.) — but not a default assumption.
-- **Cache-first for the app shell, with runtime-populated caching**
-  (not a precompiled precache list) — see "Current Architecture" for
-  the full reasoning (Vite's hashed filenames aren't known at author
-  time without build-integrated tooling).
-- **Manual update flow (a banner + explicit reload), never a silent
-  `skipWaiting()`** — see "Current Architecture"/"DO NOT CHANGE". This
-  protects an in-progress sale from being interrupted by a background
-  update.
-- **Icons are rasterized from `favicon.svg` via `cairosvg` (pip) +
-  Pillow, not hand-authored PNGs or a new npm image-processing
-  dependency.** `pythonhosted.org`/`pypi.org` were reachable this
-  session even though the npm registry access is separate — worth
-  remembering as another way to generate assets without adding to
-  `package.json` if a future phase needs similar rasterization/image
-  work and npm access is down again.
-- **The pre-existing mobile sidebar bug was fixed as part of this
-  phase**, even though it's not an offline/PWA feature, because it was
-  discovered BY this phase's own click-through work and is a one-line,
-  low-risk, high-value fix (broken navigation on every phone screen).
-  This is a deliberate, narrow exception to "only fix bugs that block
-  the current phase" — it doesn't block Phase 8's own functionality,
-  but leaving a freshly-discovered, trivially-fixable, high-visibility
-  bug undocumented-and-unfixed when the fix was already verified working
-  seemed like the wrong call. The cosmetic side effect it exposed (no
-  mobile branding) was deliberately NOT also fixed, to avoid scope
-  creep into what's really Phase 9's territory.
+- **The mobile brand mark duplicates the sidebar's markup rather than
+  sharing a component.** See "Current Architecture" — a deliberate
+  lean choice for a two-call-site need, revisit if a third appears.
+- **Loading states reuse `EmptyState`'s visual language
+  (`.empty-state` wrapper, same title class) via a new sibling
+  component (`LoadingState`) rather than modifying `EmptyState` itself
+  to take a "loading" mode.** Keeps `EmptyState`'s prop surface
+  (icon/title/description/action) untouched and its own meaning
+  (nothing here) distinct from "still finding out what's here."
+- **Touch targets were bumped based on real screenshot evidence, not a
+  blanket sweep.** Only the five specific rules found visibly undersized
+  were changed; controls already at or above 44px (e.g. `.btn`,
+  `.icon-btn`, `.field__input`, `.payment-method-btn`, all already
+  using `--tap-target-min: 48px`) were left alone.
+- **The cart-line gap tightening is scoped to just `.cart-line` and
+  `.qty-stepper`**, not applied as a general "reduce all gaps" pass —
+  only the one row that visibly broke from the touch-target change was
+  touched.
 
 ## Important Files
 
-Everything in Phases 0–7's handoff still applies. New this phase:
-
-`public/manifest.webmanifest`
-→ New. Web app manifest — name, icons, `start_url: "/#/"`, `display:
-"standalone"`, theme colors matching `theme.css`.
-
-`public/icons/icon-192.png`, `icon-512.png`, `icon-512-maskable.png`
-→ New. Rasterized from `public/favicon.svg` — regenerate from there if
-the logo changes, don't hand-edit these PNGs.
-
-`public/sw.js`
-→ New. Plain JS (not compiled by tsc/Vite — served as-is from
-`public/`, can't import from `src/`). Cache-first service worker; see
-"Current Architecture" for the full strategy. `CACHE_VERSION` constant
-must be bumped on future deploys that change cached files.
-
-`src/pwa/registerServiceWorker.ts`
-→ New. `registerServiceWorker()`, `isServiceWorkerUpdateAvailable()`,
-`applyServiceWorkerUpdate()`, and the `SW_UPDATE_EVENT` constant.
-
-`src/hooks/useOnlineStatus.ts`, `src/hooks/useServiceWorkerUpdate.ts`
-→ New. Thin React hooks over `navigator.onLine`/`online`/`offline`
-events and the update-available window event, respectively.
-
-`src/components/StatusBanners.tsx`
-→ New. Offline / update-available banner. Mounted in `AppShell.tsx`.
+Everything in Phases 0–8's handoff still applies. New/changed this
+phase:
 
 `src/components/AppShell.tsx`
-→ Extended (not rewritten): renders `<StatusBanners />` above
-`<Outlet />` inside `<main className="app-main">`.
+→ Extended: `.app-topbar` now includes a `.app-topbar__brand-mobile`
+block (mobile-only brand mark), alongside the existing tagline.
+
+`src/components/LoadingState.tsx`
+→ New. Spinner-based loading indicator, styled to match `EmptyState`.
+
+`src/pages/PosPage.tsx`, `src/pages/HistoryPage.tsx`,
+`src/pages/ReportsPage.tsx`, `src/components/ProductsManager.tsx`,
+`src/components/CategoriesManager.tsx`,
+`src/components/PaymentMethodsManager.tsx`
+→ Extended: initial-load `return null` replaced with
+`<LoadingState label="…" />`.
 
 `src/styles/layout.css`
-→ Extended: added `.app-sidebar { display: none; }` base rule (bug
-fix, see "Known Issues"/"Decisions Already Made" above).
+→ Extended: `.app-topbar__brand-mobile` rules + `.app-topbar__page`
+`display: none` base / `display: block` desktop-override.
 
 `src/styles/components.css`
-→ Extended: `.banner--offline`, `.banner--update`, `.app-status-banner`.
+→ Extended: `.loading-spinner` + `@keyframes loading-spin`; touch-target
+sizing on `.qty-stepper__btn`/`.modal-sheet__close`/
+`.segmented__item`/`.category-tabs__item`/`.range-tabs__item`; gap
+tightening on `.cart-line`/`.qty-stepper`.
 
-`index.html`
-→ Extended: manifest link, apple-touch-icon, iOS PWA meta tags.
+`public/sw.js`
+→ `CACHE_VERSION`: `"v1"` → `"v2"`.
 
-`src/main.tsx`
-→ Extended: `registerServiceWorker()` call gated on
-`import.meta.env.PROD`.
-
-`scripts/smoke-test-db.ts`
-→ Extended with a short section 10 comment (no fake tests — offline/PWA
-code is browser-API-only, same reasoning as `utils/download.ts`).
+`scripts/mobile-screens.mjs`
+→ New. Not an npm script, not a project dependency-user. See its own
+header comment before running it.
 
 ## Database Structure
 
-Unchanged from Phase 1 — Phase 8 touches no IndexedDB schema or logic.
-This was actually exercised for real this session: the click-through's
-offline sale wrote to the same six stores while the network was
-disabled, with no special-casing needed, confirming Phase 8's own
-framing (IndexedDB was always offline-capable; only the app shell
-needed work).
+Unchanged from Phase 1 — Phase 9 touches no IndexedDB schema or logic.
 
 ## Completed Features
 
-- Offline + PWA (this phase): installable web app manifest, a
-  cache-first service worker covering the full app shell, an
-  offline-status banner, and a manual update-available banner. Verified
-  working end-to-end via a real headless-browser click-through,
-  including a real offline sale write and a real full-replace restore
-  round-trip.
-- (Carried) Backup + Restore (Products → Backup tab).
+- Polish + Mobile UX (this phase): mobile app branding in the topbar,
+  44px-minimum touch targets on every control found undersized, loading
+  indicators on every page's initial data fetch, and a confirmed-
+  consistent empty-state treatment across the app. Verified with a real
+  before/after headless-browser mobile screenshot pass, plus a desktop-
+  layout regression check and an offline-reload regression check.
+- (Carried) Offline + PWA: installable manifest, cache-first service
+  worker, offline/update banners.
+- (Carried) Backup + Restore.
 - (Carried) Export (Reports): CSV download and Print/Save-as-PDF.
 - (Carried) Reports: date-range selection, totals, payment breakdown,
   product performance.
@@ -400,5 +315,4 @@ needed work).
   search/detail/delete/notes.
 - (Carried) product/category/payment-method management, POS grid +
   cart, sales recording with price/name snapshots, responsive app
-  shell (now with the mobile sidebar bug fixed), IndexedDB schema,
-  error boundary.
+  shell, IndexedDB schema, error boundary.

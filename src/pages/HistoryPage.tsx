@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Card } from "../components/Card";
 import { EmptyState } from "../components/EmptyState";
+import { LoadingState } from "../components/LoadingState";
 import { SaleDetailModal } from "../components/SaleDetailModal";
 import { formatDateKey, listSales } from "../services/salesService";
 import { getSettings } from "../services/settingsService";
@@ -84,7 +85,7 @@ export function HistoryPage() {
     );
   }
 
-  if (sales === null) return null;
+  if (sales === null) return <LoadingState label="Loading sales history…" />;
 
   return (
     <>

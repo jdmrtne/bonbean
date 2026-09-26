@@ -10,6 +10,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Button } from "../components/Button";
 import { Card } from "../components/Card";
 import { EmptyState } from "../components/EmptyState";
+import { LoadingState } from "../components/LoadingState";
 import { listSales } from "../services/salesService";
 import { getSettings } from "../services/settingsService";
 import type { Sale } from "../types";
@@ -143,7 +144,7 @@ export function ReportsPage() {
     );
   }
 
-  if (sales === null) return null;
+  if (sales === null) return <LoadingState label="Loading reports…" />;
 
   return (
     <>

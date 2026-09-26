@@ -86,6 +86,30 @@
   color: var(--color-ink);
 }
 
+/* PHASE 9: LoadingState — reuses .empty-state's layout/spacing so a
+   loading screen and an empty screen feel like the same visual family,
+   swapping EmptyState's static icon for a spinning ring. */
+.loading-spinner {
+  width: 2rem;
+  height: 2rem;
+  border-radius: 50%;
+  border: 3px solid var(--color-line);
+  border-top-color: var(--color-accent);
+  animation: loading-spin 0.7s linear infinite;
+}
+
+@keyframes loading-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .loading-spinner {
+    animation: none;
+  }
+}
+
 /* Banner (error / info) */
 .banner {
   display: flex;
@@ -178,10 +202,11 @@
 }
 
 .modal-sheet__close {
+  /* PHASE 9: was 32px — bumped to the ~44px touch-target minimum. */
   background: var(--color-surface-sunken);
   border: none;
-  width: 32px;
-  height: 32px;
+  width: 44px;
+  height: 44px;
   border-radius: var(--radius-pill);
   cursor: pointer;
 }
@@ -269,7 +294,7 @@
   flex: 1 1 0;
   border: none;
   background: transparent;
-  min-height: 40px;
+  min-height: 44px; /* PHASE 9: was 40px, bumped to touch-target minimum */
   border-radius: var(--radius-sm);
   font: var(--text-small);
   color: var(--color-ink-soft);
@@ -522,7 +547,7 @@ button.list-row:hover {
   background: var(--color-surface-sunken);
   color: var(--color-ink-soft);
   padding: 0 var(--space-4);
-  min-height: 40px;
+  min-height: 44px; /* PHASE 9: was 40px, bumped to touch-target minimum */
   border-radius: var(--radius-pill);
   font: var(--text-small);
   cursor: pointer;
@@ -615,7 +640,10 @@ button.list-row:hover {
 .cart-line {
   display: flex;
   align-items: center;
-  gap: var(--space-3);
+  /* PHASE 9: tightened from space-3 (12px) to space-2 (8px) to give the
+     product name column back some of the width the bigger qty-stepper
+     buttons (36px -> 44px, see below) now take up on a narrow phone. */
+  gap: var(--space-2);
   padding: var(--space-3) 0;
 }
 
@@ -650,13 +678,18 @@ button.list-row:hover {
 .qty-stepper {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
+  /* PHASE 9: tightened from space-2 (8px) to space-1 (4px) for the same
+     reason as .cart-line's gap above — reclaim width for the name
+     column after the buttons themselves grew. */
+  gap: var(--space-1);
   flex: 0 0 auto;
 }
 
 .qty-stepper__btn {
-  width: 36px;
-  height: 36px;
+  /* PHASE 9: was 36px — bumped to the ~44px touch-target minimum found
+     during the mobile-viewport pass (see HANDOFF.md). */
+  width: 44px;
+  height: 44px;
   border-radius: var(--radius-pill);
   border: 1px solid var(--color-line-strong);
   background: var(--color-surface);
@@ -860,7 +893,7 @@ button.list-row:hover {
   background: var(--color-surface-sunken);
   color: var(--color-ink-soft);
   padding: 0 var(--space-4);
-  min-height: 40px;
+  min-height: 44px; /* PHASE 9: was 40px, bumped to touch-target minimum */
   border-radius: var(--radius-pill);
   font: var(--text-small);
   cursor: pointer;
