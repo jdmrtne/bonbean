@@ -810,3 +810,74 @@ button.list-row:hover {
   color: var(--color-ink-soft);
   margin-top: var(--space-1);
 }
+
+/* PHASE 5: Reports — date-range tabs. Same horizontal-scroller pattern as
+   POS's .category-tabs rather than a fixed-width .segmented control: six
+   presets plus "Custom" don't fit comfortably as equal-width flex items on
+   a narrow screen, and this list is more likely to grow (e.g. "This year")
+   than shrink. */
+.range-tabs {
+  display: flex;
+  gap: var(--space-2);
+  overflow-x: auto;
+  padding-bottom: var(--space-1);
+  margin-bottom: var(--space-3);
+  scrollbar-width: none;
+}
+
+.range-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.range-tabs__item {
+  flex: 0 0 auto;
+  white-space: nowrap;
+  border: none;
+  background: var(--color-surface-sunken);
+  color: var(--color-ink-soft);
+  padding: 0 var(--space-4);
+  min-height: 40px;
+  border-radius: var(--radius-pill);
+  font: var(--text-small);
+  cursor: pointer;
+}
+
+.range-tabs__item.is-active {
+  background: var(--color-accent);
+  color: #fff;
+}
+
+.custom-range-row {
+  display: flex;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+.custom-range-row .field {
+  flex: 1 1 0;
+  margin-bottom: 0;
+  min-width: 0;
+}
+
+.report-range-label {
+  font: var(--text-small);
+  color: var(--color-ink-soft);
+  margin-bottom: var(--space-4);
+}
+
+/* Quantity/revenue toggle for product performance — only two options, so
+   the fixed-width .segmented control (used elsewhere for Products/
+   Categories/Payment Methods) fits better here than a scroller. */
+.dashboard__section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-2);
+}
+
+.dashboard__section-header .segmented {
+  margin-bottom: 0;
+  flex: 0 0 auto;
+  min-width: 180px;
+}

@@ -6,6 +6,11 @@ import { formatDateKey, listSales } from "../services/salesService";
 import { getSettings } from "../services/settingsService";
 import type { Sale } from "../types";
 import { formatMoney } from "../utils/money";
+import {
+  computeProductPerformance,
+  computeSalesStats,
+  topProductsByQuantity,
+} from "../utils/reportStats";
 
 const TOP_PRODUCTS_LIMIT = 5;
 
@@ -39,49 +44,23 @@ export function HistoryPage() {
     [sales, todayKey],
   );
 
+  // PHASE 5: this used to duplicate its own total/count/average/breakdown
+  // computation inline. That logic (and the "top products" ranking) is now
+  // shared with ReportsPage.tsx via utils/reportStats.ts, so both screens
+  // compute stats for a set of sales the same way — this just narrows the
+  // input to today's sales, same as before.
+  //
+  // Ranked by quantity sold (not revenue) — a simple "what's moving today"
+  // view that matches how a coffee cart owner thinks about stock. Reports
+  // (Phase 5) offers both quantity and revenue ranking, since a wider date
+  // range makes revenue comparison more useful than it is for a single day.
   const dashboard = useMemo(() => {
-    const totalToday = todaysSales.reduce((sum, s) => sum + s.total, 0);
-    const transactionCount = todaysSales.length;
-    const itemsSold = todaysSales.reduce(
-      (sum, s) => sum + s.items.reduce((lineSum, i) => lineSum + i.quantity, 0),
-      0,
+    const stats = computeSalesStats(todaysSales);
+    const topProducts = topProductsByQuantity(
+      computeProductPerformance(todaysSales),
+      TOP_PRODUCTS_LIMIT,
     );
-    const averageSale = transactionCount > 0 ? totalToday / transactionCount : 0;
-
-    const byPaymentMethod = new Map<string, number>();
-    for (const sale of todaysSales) {
-      byPaymentMethod.set(
-        sale.paymentMethod,
-        (byPaymentMethod.get(sale.paymentMethod) ?? 0) + sale.total,
-      );
-    }
-
-    // Ranked by quantity sold (not revenue) — a simple "what's moving
-    // today" view that matches how a coffee cart owner thinks about
-    // stock. Revenue ranking can be added in Phase 5 if it's wanted
-    // there too; documented here since the master spec left the choice
-    // open.
-    const byProduct = new Map<string, number>();
-    for (const sale of todaysSales) {
-      for (const item of sale.items) {
-        byProduct.set(
-          item.productNameSnapshot,
-          (byProduct.get(item.productNameSnapshot) ?? 0) + item.quantity,
-        );
-      }
-    }
-    const topProducts = [...byProduct.entries()]
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, TOP_PRODUCTS_LIMIT);
-
-    return {
-      totalToday,
-      transactionCount,
-      itemsSold,
-      averageSale,
-      paymentBreakdown: [...byPaymentMethod.entries()].sort((a, b) => b[1] - a[1]),
-      topProducts,
-    };
+    return { ...stats, topProducts };
   }, [todaysSales]);
 
   // Search matches product names within a sale's line items — the
@@ -118,7 +97,7 @@ export function HistoryPage() {
         <div className="dashboard__section-title">Today</div>
         <div className="stat-grid">
           <div className="stat-card">
-            <div className="stat-card__value">{formatMoney(dashboard.totalToday, currency)}</div>
+            <div className="stat-card__value">{formatMoney(dashboard.total, currency)}</div>
             <div className="stat-card__label">Today's sales</div>
           </div>
           <div className="stat-card">
@@ -153,13 +132,13 @@ export function HistoryPage() {
           <Card>
             <div className="dashboard__section-title">Top products today</div>
             <div className="top-products-list">
-              {dashboard.topProducts.map(([name, qty], index) => (
-                <div className="top-product-row" key={name}>
+              {dashboard.topProducts.map((product, index) => (
+                <div className="top-product-row" key={product.name}>
                   <span>
                     <span className="top-product-row__rank">{index + 1}.</span>
-                    {name}
+                    {product.name}
                   </span>
-                  <span>{qty} sold</span>
+                  <span>{product.quantity} sold</span>
                 </div>
               ))}
             </div>

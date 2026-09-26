@@ -8,6 +8,14 @@
 import { getDB } from "../database/db";
 import type { CartLine, Sale, SaleItem } from "../types";
 import { generateId } from "../utils/id";
+import { formatDateKey } from "../utils/date";
+
+// Re-exported for backward compatibility — HistoryPage.tsx (PHASE 4) and
+// others import formatDateKey from this module. The implementation now
+// lives in utils/date.ts (PHASE 5) so it can be shared with the
+// dependency-free reportStats.ts without pulling in IndexedDB. See
+// utils/date.ts for why.
+export { formatDateKey };
 
 export interface RecordSaleInput {
   lines: CartLine[];
@@ -114,13 +122,6 @@ export async function updateSaleNotes(id: string, notes: string): Promise<void> 
   const existing = await db.get("sales", id);
   if (!existing) throw new Error("Sale not found");
   await db.put("sales", { ...existing, notes: notes.trim() || undefined });
-}
-
-export function formatDateKey(d: Date): string {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
 }
 
 function formatTimeKey(d: Date): string {

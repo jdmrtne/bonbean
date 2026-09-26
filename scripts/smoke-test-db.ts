@@ -118,6 +118,120 @@ async function main() {
   assert(updated.businessName === "Test Cart", "settings update persists");
   assert(updated.currency === "₱", "settings update doesn't clobber other fields");
 
+  // 7. Report stats: date-range resolution + aggregation (PHASE 5)
+  //
+  // This is the one section of this file that never touches IndexedDB —
+  // utils/reportStats.ts is deliberately dependency-free (see its header
+  // comment), so it's tested directly against hand-built Sale[] fixtures
+  // rather than through recordSale/listSales. A fixed `now` is passed to
+  // resolveDateRange throughout so these assertions never depend on the
+  // date this script happens to run.
+  const {
+    resolveDateRange,
+    filterSalesByRange,
+    computeSalesStats,
+    computeProductPerformance,
+    topProductsByQuantity,
+    topProductsByRevenue,
+  } = await import("../src/utils/reportStats");
+
+  const now = new Date(2026, 2, 18); // Wed 2026-03-18, arbitrary fixed date
+
+  assert(
+    JSON.stringify(resolveDateRange("today", undefined, now)) ===
+      JSON.stringify({ start: "2026-03-18", end: "2026-03-18" }),
+    "resolveDateRange('today')",
+  );
+  assert(
+    JSON.stringify(resolveDateRange("yesterday", undefined, now)) ===
+      JSON.stringify({ start: "2026-03-17", end: "2026-03-17" }),
+    "resolveDateRange('yesterday')",
+  );
+  assert(
+    JSON.stringify(resolveDateRange("last7", undefined, now)) ===
+      JSON.stringify({ start: "2026-03-12", end: "2026-03-18" }),
+    "resolveDateRange('last7') is 7 days inclusive of today",
+  );
+  assert(
+    JSON.stringify(resolveDateRange("thisMonth", undefined, now)) ===
+      JSON.stringify({ start: "2026-03-01", end: "2026-03-18" }),
+    "resolveDateRange('thisMonth') runs from the 1st through today",
+  );
+  assert(
+    JSON.stringify(resolveDateRange("lastMonth", undefined, now)) ===
+      JSON.stringify({ start: "2026-02-01", end: "2026-02-28" }),
+    "resolveDateRange('lastMonth') is the full previous calendar month",
+  );
+  assert(
+    JSON.stringify(resolveDateRange("lastMonth", undefined, new Date(2026, 0, 10))) ===
+      JSON.stringify({ start: "2025-12-01", end: "2025-12-31" }),
+    "resolveDateRange('lastMonth') crosses a year boundary correctly",
+  );
+  assert(
+    JSON.stringify(resolveDateRange("custom", { start: "2026-01-05", end: "2026-01-01" }, now)) ===
+      JSON.stringify({ start: "2026-01-01", end: "2026-01-05" }),
+    "resolveDateRange('custom') swaps a reversed start/end instead of returning an empty range",
+  );
+
+  const reportSales = [
+    {
+      ...secondSale,
+      date: "2026-03-18",
+      total: 200,
+      paymentMethod: "Cash",
+      items: [
+        { ...secondSale.items[0], productNameSnapshot: "Iced Latte", quantity: 2, lineTotal: 200 },
+      ],
+    },
+    {
+      ...secondSale,
+      id: "report-fixture-2",
+      date: "2026-03-17",
+      total: 250,
+      paymentMethod: "GCash",
+      items: [
+        { ...secondSale.items[0], productNameSnapshot: "Croissant", quantity: 5, lineTotal: 250 },
+      ],
+    },
+    {
+      ...secondSale,
+      id: "report-fixture-3",
+      date: "2026-03-10", // outside the last7 window used below
+      total: 100,
+      paymentMethod: "Cash",
+      items: [
+        { ...secondSale.items[0], productNameSnapshot: "Iced Latte", quantity: 1, lineTotal: 100 },
+      ],
+    },
+  ];
+
+  const last7Range = resolveDateRange("last7", undefined, now);
+  const last7Sales = filterSalesByRange(reportSales, last7Range);
+  assert(last7Sales.length === 2, "filterSalesByRange excludes the out-of-range fixture sale");
+
+  const last7Stats = computeSalesStats(last7Sales);
+  assert(last7Stats.total === 450, "computeSalesStats total matches the two in-range sales");
+  assert(last7Stats.transactionCount === 2, "computeSalesStats transactionCount");
+  assert(last7Stats.itemsSold === 7, "computeSalesStats itemsSold");
+  assert(last7Stats.averageSale === 225, "computeSalesStats averageSale");
+  assert(
+    last7Stats.paymentBreakdown[0][0] === "GCash" && last7Stats.paymentBreakdown[0][1] === 250,
+    "computeSalesStats paymentBreakdown sorted descending by total",
+  );
+  assert(computeSalesStats([]).averageSale === 0, "computeSalesStats averageSale is 0 (not NaN) for an empty range");
+
+  const allRange = resolveDateRange("thisMonth", undefined, now);
+  const monthSales = filterSalesByRange(reportSales, allRange);
+  const perf = computeProductPerformance(monthSales);
+  const latteRow = perf.find((p) => p.name === "Iced Latte");
+  assert(latteRow?.quantity === 3, "computeProductPerformance sums quantity across sales");
+  assert(latteRow?.revenue === 300, "computeProductPerformance sums revenue across sales");
+
+  const byQty = topProductsByQuantity(perf, 5);
+  const byRev = topProductsByRevenue(perf, 5);
+  assert(byQty[0].name === "Croissant", "topProductsByQuantity ranks Croissant (5) above Iced Latte (3)");
+  assert(byRev[0].name === "Iced Latte", "topProductsByRevenue ranks Iced Latte (300) above Croissant (250)");
+
   console.log("\nAll smoke tests passed.");
 }
 
