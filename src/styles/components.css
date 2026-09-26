@@ -1,0 +1,123 @@
+/* Button */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-height: var(--tap-target-min);
+  padding: 0 var(--space-5);
+  border-radius: var(--radius-md);
+  border: none;
+  font: var(--text-heading);
+  cursor: pointer;
+  transition: transform 0.08s ease, background-color 0.15s ease;
+  user-select: none;
+}
+
+.btn:active {
+  transform: scale(0.98);
+}
+
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.btn--primary {
+  background: var(--color-accent);
+  color: #fff;
+}
+
+.btn--primary:hover:not(:disabled) {
+  background: var(--color-accent-strong);
+}
+
+.btn--secondary {
+  background: var(--color-surface-sunken);
+  color: var(--color-ink);
+}
+
+.btn--danger {
+  background: var(--color-danger-wash);
+  color: var(--color-danger);
+}
+
+.btn--ghost {
+  background: transparent;
+  color: var(--color-ink-soft);
+}
+
+.btn--block {
+  width: 100%;
+}
+
+.btn--lg {
+  min-height: 56px;
+  font: var(--text-title);
+  border-radius: var(--radius-lg);
+}
+
+/* Card */
+.card {
+  background: var(--color-surface);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-line);
+  box-shadow: var(--shadow-card);
+  padding: var(--space-4);
+}
+
+/* Empty state */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: var(--space-2);
+  padding: var(--space-8) var(--space-4);
+  color: var(--color-ink-soft);
+}
+
+.empty-state__icon {
+  font-size: 2rem;
+}
+
+.empty-state__title {
+  font: var(--text-heading);
+  color: var(--color-ink);
+}
+
+/* Banner (error / info) */
+.banner {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  font: var(--text-body);
+}
+
+.banner--danger {
+  background: var(--color-danger-wash);
+  color: var(--color-danger);
+}
+
+.banner--success {
+  background: var(--color-success-wash);
+  color: var(--color-success);
+}
+
+/* Page header used inside pages */
+.page-header {
+  margin-bottom: var(--space-4);
+}
+
+.page-header__title {
+  font: var(--text-display);
+  letter-spacing: -0.01em;
+}
+
+.page-header__subtitle {
+  font: var(--text-body);
+  color: var(--color-ink-soft);
+  margin-top: var(--space-1);
+}

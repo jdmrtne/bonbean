@@ -1,0 +1,170 @@
+.app-shell {
+  display: flex;
+  flex-direction: column;
+  min-height: 100dvh;
+  background: var(--color-bg);
+}
+
+.app-topbar {
+  height: var(--topbar-height);
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 var(--space-4);
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--color-line);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.app-topbar__brand {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.app-topbar__mark {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-sm);
+  background: var(--color-ink);
+  color: var(--color-accent-wash);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font: var(--text-heading);
+  flex: 0 0 auto;
+}
+
+.app-topbar__title {
+  font: var(--text-title);
+  letter-spacing: -0.01em;
+}
+
+.app-topbar__page {
+  font: var(--text-small);
+  color: var(--color-ink-soft);
+}
+
+.app-main {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding-bottom: calc(var(--tabbar-height) + env(safe-area-inset-bottom, 0px));
+}
+
+.app-main__inner {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: var(--space-4);
+}
+
+.app-tabbar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: calc(var(--tabbar-height) + env(safe-area-inset-bottom, 0px));
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  display: flex;
+  background: var(--color-surface);
+  border-top: 1px solid var(--color-line);
+  z-index: 20;
+}
+
+.app-tabbar__item {
+  flex: 1 1 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  background: none;
+  border: none;
+  min-height: var(--tap-target-min);
+  color: var(--color-ink-soft);
+  font: var(--text-small);
+  text-decoration: none;
+}
+
+.app-tabbar__icon {
+  font-size: 1.25rem;
+  line-height: 1;
+}
+
+.app-tabbar__item.is-active {
+  color: var(--color-accent-strong);
+}
+
+.app-tabbar__item.is-active .app-tabbar__mark {
+  color: var(--color-accent-strong);
+}
+
+/* Desktop: sidebar nav instead of bottom tabs */
+@media (min-width: 860px) {
+  .app-shell {
+    flex-direction: row;
+  }
+
+  .app-topbar {
+    position: fixed;
+    top: 0;
+    left: 220px;
+    right: 0;
+  }
+
+  .app-sidebar {
+    width: 220px;
+    flex: 0 0 220px;
+    background: var(--color-surface);
+    border-right: 1px solid var(--color-line);
+    display: flex;
+    flex-direction: column;
+    padding: var(--space-4) var(--space-3);
+    gap: var(--space-1);
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    left: 0;
+  }
+
+  .app-sidebar__brand {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-2) var(--space-5);
+  }
+
+  .app-sidebar__link {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-3);
+    border-radius: var(--radius-md);
+    color: var(--color-ink-soft);
+    text-decoration: none;
+    font: var(--text-heading);
+    min-height: var(--tap-target-min);
+  }
+
+  .app-sidebar__link.is-active {
+    background: var(--color-accent-wash);
+    color: var(--color-accent-ink);
+  }
+
+  .app-tabbar {
+    display: none;
+  }
+
+  .app-main {
+    margin-left: 220px;
+    padding-top: var(--topbar-height);
+    padding-bottom: 0;
+    width: calc(100% - 220px);
+  }
+
+  .app-main__inner {
+    padding: var(--space-6);
+  }
+}
